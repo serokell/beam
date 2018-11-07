@@ -7,20 +7,20 @@ stages:
 
 build beam core:
   stage: build-base
-  script: nix-shell --command "stack build --nix beam-core beam-migrate --flag beam-core:werror --flag beam-migrate:werror"
+  script: nix-shell --command "stack build --system-ghc --nix beam-core beam-migrate --flag beam-core:werror --flag beam-migrate:werror"
 
 build beam sqlite:
   stage: build-backends
-  script: nix-shell --command "stack build ---flag ast beam-sqlite --flag beam-sqlite:werror"
+  script: nix-shell --command "stack build --system-ghc beam-sqlite --flag beam-sqlite:werror"
 
 build beam postgres:
   stage: build-backends
-  script: nix-shell --command "stack build ---flag ast beam-postgres --flag beam-postgres:werror"
+  script: nix-shell --command "stack build --system-ghc beam-postgres --flag beam-postgres:werror"
 
 test beam-core:
   stage: test
-  script: nix-shell --command "stack test --nix beam-core --flag beam-core:werror"
+  script: nix-shell --command "stack test --system-ghc --nix beam-core --flag beam-core:werror"
 
 test beam-postgres:
   stage: test
-  script: nix-shell --command "gstack test --nix beam-postgres --flag beam-postgres:werror"
+  script: nix-shell --command "stack test --system-ghc --nix beam-postgres --flag beam-postgres:werror"
