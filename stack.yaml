@@ -1,8 +1,8 @@
 #resolver: lts-9.0
 #resolver: lts-10.3
 #resolver: lts-10.5
-#resolver: lts-12.0
-resolver: nightly-2018-11-05
+resolver: lts-12.17
+# resolver: nightly-2018-11-05
 packages:
   - beam-sqlite
   - beam-postgres
@@ -11,5 +11,3 @@ packages:
   - beam-migrate-cli
 nix:
   shell-file: shell.nix
-extra-deps:
-  - vector-sized-1.0.4.0
