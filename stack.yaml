@@ -11,3 +11,5 @@ packages:
   - beam-migrate-cli
 nix:
   shell-file: shell.nix
+extra-deps:
+  - vector-sized-1.0.4.0
