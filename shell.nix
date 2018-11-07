@@ -1,4 +1,4 @@
-{ nixpkgs ? import <nixpkgs> {}, ghc ? nixpkgs.haskell.packages.ghc843.ghc }:
+{ nixpkgs ? import <nixpkgs> {}, ghc ? nixpkgs.haskell.packages.ghc844.ghc }:
 with (import <nixpkgs> {});
 
 let
