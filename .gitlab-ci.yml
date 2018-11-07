@@ -5,6 +5,12 @@ stages:
   - build-backends
   - test
 
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+  - .stack/
+  - /nix
+
 build beam core:
   stage: build-base
   script: nix-shell --command "stack build --system-ghc --nix beam-core beam-migrate --flag beam-core:werror --flag beam-migrate:werror"
