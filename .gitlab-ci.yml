@@ -9,6 +9,7 @@ cache:
   key: ${CI_COMMIT_REF_SLUG}
   paths:
   - .stack/
+  - .stack-work/
   - /nix
 
 build beam core:
