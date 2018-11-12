@@ -30,4 +30,4 @@ test beam-core:
 
 test beam-postgres:
   stage: test
-  script: nix-shell --command "stack test --system-ghc --nix beam-postgres --flag beam-postgres:werror"
+  script: su -c 'nix-shell --command "stack test --system-ghc --nix beam-postgres --flag beam-postgres:werror"' - postgres
