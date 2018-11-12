@@ -8,7 +8,7 @@ stages:
 cache:
   key: ${CI_COMMIT_REF_SLUG}
   paths:
-  - .stack/
+  - /builds/tathougies1/beam/.stack/
   - .stack-work/
   - /nix
 
@@ -30,4 +30,4 @@ test beam-core:
 
 test beam-postgres:
   stage: test
-  script: su -c 'nix-shell --command "stack test --system-ghc --nix beam-postgres --flag beam-postgres:werror"' - postgres
+  script: nix-shell --command "su -c 'stack test --system-ghc --nix beam-postgres --flag beam-postgres:werror' - postgres"
