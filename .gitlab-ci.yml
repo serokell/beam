@@ -1,8 +1,7 @@
 image: nixos/nix:latest
 
 stages:
-  - build-base
-  - build-backends
+  - build
   - test
 
 cache:
@@ -14,21 +13,29 @@ cache:
   - /nix
 
 build beam core:
-  stage: build-base
+  stage: build
   script: nix-shell --command "stack build --system-ghc --nix beam-core beam-migrate --flag beam-core:werror --flag beam-migrate:werror"
 
 build beam sqlite:
-  stage: build-backends
+  stage: build
+  dependencies:
+    - "build beam core"
   script: nix-shell --command "stack build --system-ghc beam-sqlite --flag beam-sqlite:werror"
 
 build beam postgres:
-  stage: build-backends
+  stage: build
+  dependencies:
+    - "build beam core"
   script: nix-shell --command "stack build --system-ghc beam-postgres --flag beam-postgres:werror"
 
 test beam-core:
   stage: test
+  dependencies:
+    - "build beam core"
   script: nix-shell --command "stack test --system-ghc --nix beam-core --flag beam-core:werror"
 
 test beam-postgres:
   stage: test
+  dependencies:
+    - "build beam postgres"
   script: mkdir /var/lib/postgres && chown postgres /var/lib/postgres && mkdir /var/lib/postgres/.stack && nix-shell --command "su -c 'stack test --system-ghc --nix beam-postgres --flag beam-postgres:werror' postgres"
