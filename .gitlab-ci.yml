@@ -1,6 +1,7 @@
 image: nixos/nix:latest
 
 stages:
+  - build-base
   - build
   - test
 
@@ -13,7 +14,7 @@ cache:
   - /nix
 
 build beam core:
-  stage: build
+  stage: build-base
   script: nix-shell --command "stack build --system-ghc --nix beam-core beam-migrate --flag beam-core:werror --flag beam-migrate:werror"
 
 build beam sqlite:
