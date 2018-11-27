@@ -39,4 +39,4 @@ test beam-postgres:
   stage: test
   dependencies:
     - "build beam postgres"
-  script: mkdir /var/lib/postgres && chown postgres /var/lib/postgres && mkdir /var/lib/postgres/.stack && nix-shell --command "su -c 'stack test --system-ghc --nix beam-postgres --flag beam-postgres:werror' postgres"
+  script: mkdir /var/lib/postgres && chown postgres /var/lib/postgres && mkdir /var/lib/postgresql/.stack && nix-shell --command "su -c 'stack test --system-ghc --nix beam-postgres --flag beam-postgres:werror' postgres"
