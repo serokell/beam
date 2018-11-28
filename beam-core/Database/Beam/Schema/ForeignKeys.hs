@@ -1,9 +1,15 @@
 {-# LANGUAGE CPP                  #-}
+{-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Database.Beam.Schema.ForeignKeys
-    ( SqlForeignKey (..)
+    ( SqlReferentialAction (..)
+    , SqlForeignKey (..)
+    , createForeignKey
+
+    -- * Automatic derivation
+    , ReferencesTable (..)
     , GAutoTableForeignKeys (..)
     , AutoTableForeignKeys (..)
     , GAutoDbForeignKeys (..)
@@ -16,6 +22,7 @@ import qualified Data.DList as DL
 import Data.List.NonEmpty (NonEmpty (..), nonEmpty)
 import Data.Proxy
 import Data.Text (Text)
+import qualified Data.Text as T
 
 import GHC.Exts (toList)
 import GHC.Generics hiding (C, R)
@@ -24,15 +31,62 @@ import GHC.Generics (Generic)
 import Database.Beam.Schema.Lookup
 import Database.Beam.Schema.Tables
 
+data SqlReferentialAction
+    = SqlCascade
+    | SqlNoAction
+    | SqlSetDefault
+    | SqlSetNull
+    -- TODO: allow SET NULL only for Nullable
+    deriving (Show, Eq, Ord)
+
+buildReferentialAction :: SqlReferentialAction -> Text
+buildReferentialAction = \case
+    SqlCascade -> "CASCADE"
+    SqlNoAction -> "NO ACTION"
+    SqlSetDefault -> "SET DEFAULT"
+    SqlSetNull -> "SET NULL"
+
 -- | Single foreign key settings.
 data SqlForeignKey = SqlForeignKey
     { siTable          :: !Text
     , siFields         :: !(NonEmpty Text)
     , siReferredTable  :: !Text
     , siReferredFields :: !(NonEmpty Text)
+    , siOnDelete       :: !(Maybe SqlReferentialAction)
+    , siOnUpdate       :: !(Maybe SqlReferentialAction)
     } deriving (Show, Eq, Ord)
 
+createForeignKey :: SqlForeignKey -> Text
+createForeignKey SqlForeignKey{..} =
+    "ALTER TABLE " <> siTable <>
+    " ADD CONSTRAINT " <>
+    ("fk_" <> T.intercalate "_" (siTable : siReferredTable : toList siFields)) <>
+    " FOREIGN KEY (" <> T.intercalate ", " (toList siFields) <> ")" <>
+    " REFERENCES" <> siReferredTable <>
+        "(" <> T.intercalate ", " (toList siReferredFields) <> ")" <>
+    (maybe "" (\a -> " ON DELETE " <> buildReferentialAction a) siOnDelete) <>
+    (maybe "" (\a -> " ON UPDATE " <> buildReferentialAction a) siOnUpdate) <>
+    ";"
+
 -- * Automatic foreign keys derivation
+
+-- | Provides foreign key settings.
+class ReferencesTable (table :: (* -> *) -> *) (table' :: (* -> *) -> *)  where
+    -- | What happens on attempt to delete the referred row.
+    -- 'Nothing' stands for backend-default behaviour.
+    referenceOnDelete
+        :: (Proxy table, Proxy table')
+        -> TableSettings table'
+        -> Maybe SqlReferentialAction
+    referenceOnDelete _ _ = Nothing
+
+    -- | What happens on attempt to change the referred row.
+    -- 'Nothing' stands for backend-default behaviour.
+    referenceOnUpdate
+        :: (Proxy table, Proxy table')
+        -> TableSettings table'
+        -> Maybe SqlReferentialAction
+    referenceOnUpdate _ _ = Nothing
 
 buildSqlForeignKey
     :: (Beamable (PrimaryKey tbl'), Table tbl')
@@ -40,8 +94,10 @@ buildSqlForeignKey
     -> [Text]
     -> Text
     -> TableSettings tbl'
+    -> Maybe SqlReferentialAction
+    -> Maybe SqlReferentialAction
     -> DList SqlForeignKey
-buildSqlForeignKey tblNm fieldNames referredTblNm referredTblSettings = do
+buildSqlForeignKey tblNm fieldNames referredTblNm referredTblSettings onDelete onUpdate = do
     let referredFields = primaryKey referredTblSettings
         referredFieldNames = allBeamValues unFieldName referredFields
     -- we allow ourselves not to arise a compile-time error when the primary key is empty,
@@ -51,6 +107,8 @@ buildSqlForeignKey tblNm fieldNames referredTblNm referredTblSettings = do
         siFields <- nonEmpty fieldNames
         let siReferredTable = referredTblNm
         siReferredFields <- nonEmpty referredFieldNames
+        let siOnDelete = onDelete
+            siOnUpdate = onUpdate
         return SqlForeignKey{..}
   where
     unFieldName (Columnar' (TableField fieldNm)) = fieldNm
@@ -67,21 +125,33 @@ instance (GAutoTableForeignKeys be db (x p), GAutoTableForeignKeys be db (y p)) 
 instance {-# OVERLAPPABLE #-} GAutoTableForeignKeys be db (Rec0 x p) where
     autoTableForeignKeys' _ = mempty
 
-instance GetDbEntity TableEntity tbl be db =>
-         GAutoTableForeignKeys be db (Rec0 (PrimaryKey tbl (TableField tbl')) p) where
-    autoTableForeignKeys' (K1 key) referringTblNm dbSettings = do
-        DatabaseEntity (DatabaseTable referredTblNm referredTblSettings) <-
-            pure $ getDbEntity (Proxy @TableEntity) (Proxy @tbl) dbSettings
-        let fieldNames = allBeamValues (\(Columnar' (TableField fieldNm)) -> fieldNm) key
-        buildSqlForeignKey referringTblNm fieldNames referredTblNm referredTblSettings
+instance (GetDbEntity TableEntity tbl' be db,
+          ReferencesTable tbl tbl') =>
+         GAutoTableForeignKeys be db (Rec0 (PrimaryKey tbl' (TableField tbl)) p) where
 
-instance GetDbEntity TableEntity tbl be db =>
-         GAutoTableForeignKeys be db (Rec0 (PrimaryKey tbl (Nullable (TableField tbl'))) p) where
     autoTableForeignKeys' (K1 key) referringTblNm dbSettings = do
         DatabaseEntity (DatabaseTable referredTblNm referredTblSettings) <-
-            pure $ getDbEntity (Proxy @TableEntity) (Proxy @tbl) dbSettings
+            pure $ getDbEntity (Proxy @TableEntity) (Proxy @tbl') dbSettings
+
         let fieldNames = allBeamValues (\(Columnar' (TableField fieldNm)) -> fieldNm) key
+            onDelete = referenceOnDelete (Proxy @tbl, Proxy @tbl') referredTblSettings
+            onUpdate = referenceOnUpdate (Proxy @tbl, Proxy @tbl') referredTblSettings
         buildSqlForeignKey referringTblNm fieldNames referredTblNm referredTblSettings
+                           onDelete onUpdate
+
+instance (GetDbEntity TableEntity tbl' be db,
+          ReferencesTable tbl tbl') =>
+         GAutoTableForeignKeys be db (Rec0 (PrimaryKey tbl' (Nullable (TableField tbl))) p) where
+
+    autoTableForeignKeys' (K1 key) referringTblNm dbSettings = do
+        DatabaseEntity (DatabaseTable referredTblNm referredTblSettings) <-
+            pure $ getDbEntity (Proxy @TableEntity) (Proxy @tbl') dbSettings
+
+        let fieldNames = allBeamValues (\(Columnar' (TableField fieldNm)) -> fieldNm) key
+            onDelete = referenceOnDelete (Proxy @tbl, Proxy @tbl') referredTblSettings
+            onUpdate = referenceOnUpdate (Proxy @tbl, Proxy @tbl') referredTblSettings
+        buildSqlForeignKey referringTblNm fieldNames referredTblNm referredTblSettings
+                           onDelete onUpdate
 
 -- | Traverses the table and for every field which is some 'PrimaryKey' makes a
 -- corresponding SQL index in the referred table.

@@ -402,6 +402,11 @@ instance Beamable PlanetT
 instance Beamable (PrimaryKey PlanetT)
 instance Beamable DummyViewT
 
+instance ReferencesTable ColonistT ColonistT where
+    referenceOnDelete _ _ = Just SqlCascade
+instance ReferencesTable ColonistT PlanetT
+instance ReferencesTable PlanetT ColonistT
+
 colonistsDbSettings :: DatabaseSettings be ColonistDb
 colonistsDbSettings = defaultDbSettings
 
@@ -467,12 +472,14 @@ foreignKeysAreBuiltCorrectly =
             , siFields = fromList $ colonistsFieldNames ^.. (ix 3 <> ix 4)
             , siReferredTable = planetsTableName
             , siReferredFields = fromList $ planetsFieldNames ^.. (ix 0 <> ix 1)
+            , siOnDelete = Nothing, siOnUpdate = Nothing
             }
           , SqlForeignKey
             { siTable = colonistsTableName
             , siFields = fromList $ colonistsFieldNames ^.. ix 2
             , siReferredTable = colonistsTableName
             , siReferredFields = fromList $ colonistsFieldNames ^.. ix 0
+            , siOnDelete = Just SqlCascade, siOnUpdate = Nothing
             }
           ]
 
@@ -482,6 +489,7 @@ foreignKeysAreBuiltCorrectly =
             , siFields = fromList $ planetsFieldNames ^.. ix 3
             , siReferredTable = colonistsTableName
             , siReferredFields = fromList $ colonistsFieldNames ^.. ix 0
+            , siOnDelete = Nothing, siOnUpdate = Nothing
             }
           ]
        )
