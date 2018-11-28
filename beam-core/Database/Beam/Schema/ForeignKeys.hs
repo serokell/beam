@@ -11,7 +11,8 @@ module Database.Beam.Schema.Indices
     , withTableIndex
     , createIndex
 
-    , AutoEntityIndex (..)
+    , GAutoTableIndices (..)
+    , AutoTableIndices (..)
     , GAutoDbIndices (..)
     , defaultDbIndices
     ) where
@@ -20,6 +21,7 @@ import Data.DList (DList)
 import qualified Data.DList as DL
 import Data.Functor.Identity (Identity)
 import Data.List.NonEmpty (NonEmpty (..), nonEmpty)
+import Data.Proxy
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -28,9 +30,9 @@ import GHC.Generics hiding (C, R)
 import GHC.Generics (Generic)
 import GHC.TypeLits
 
-import Database.Beam.Schema.Tables
 
-import Debug.Trace
+import Database.Beam.Schema.Lookup
+import Database.Beam.Schema.Tables
 
 -- | Single index settings for the given table.
 newtype SqlTableIndex = SqlTableIndex (NonEmpty Text)
@@ -97,7 +99,7 @@ educatorSchema = defaultDbSettings
 -- Example end --
 -----------------
 
--- * Manual indices definition
+-- * Indices definition
 
 type family GIsNotEmptyData (item :: Symbol) (rep :: * -> *) :: Constraint where
     GIsNotEmptyData item (D1 _d (C1 _c U1)) =
@@ -152,42 +154,62 @@ mem = withTableIndex (esSubjects educatorSchema) $
     [ tableIndex (srCourse)
     ]
 
--- * Automatic indices definition
+-- | Generic helper for 'AutoTableindices'.
+class GAutoTableIndices be db x where
+    autoTableIndices' :: Proxy x -> DatabaseSettings be db -> DList SqlIndex
+instance GAutoTableIndices be db (x p) => GAutoTableIndices be db (M1 i f x p) where
+    autoTableIndices' _ = autoTableIndices' (Proxy @(x p))
+instance (GAutoTableIndices be db (x p), GAutoTableIndices be db (y p)) =>
+          GAutoTableIndices be db ((x :*: y) p) where
+    autoTableIndices' _ = autoTableIndices' (Proxy @(x p)) <> autoTableIndices' (Proxy @(y p))
+instance GAutoTableIndices be db (Rec0 x p) where
+    autoTableIndices' _ = mempty
+instance {-# OVERLAPPING #-}
+         GetDbEntity TableEntity tbl be db =>
+         GAutoTableIndices be db (Rec0 (PrimaryKey tbl f) p) where
+    autoTableIndices' _ dbSettings = do
+        DatabaseEntity (DatabaseTable tblNm tableSettings) <-
+            pure $ getDbEntity (Proxy @TableEntity) (Proxy @tbl) dbSettings
+        let referedFields = primaryKey tableSettings
+            fieldNames = allBeamValues (\(Columnar' (TableField fieldNm)) -> fieldNm) referedFields
+        -- we allow ourselves not to arise a compile-time error when the primary key is empty,
+        -- the user will have even larger problems in such case anyway.
+        maybe DL.empty (DL.singleton . SqlIndex tblNm . SqlTableIndex) (nonEmpty fieldNames)
 
-class AutoEntityIndex be db tbl where
-    autoEntityIndex :: DatabaseEntity be db tbl -> Maybe SqlIndex
--- Other types of entities are approaching, and we probably don't want to define
--- instances for all of them.
-instance {-# OVERLAPPABLE #-}
-         AutoEntityIndex be db entity where
-    autoEntityIndex _ = trace "General entity" Nothing
-instance AutoEntityIndex be db (TableEntity table) where
-    autoEntityIndex (DatabaseEntity (DatabaseTable tblName tblSettings)) =
-        let pkFields = allBeamValues
-                           (\(Columnar' (TableField fieldNm)) -> fieldNm)
-                           (primaryKey tblSettings)
-        in trace "Table entity" $ SqlIndex tblName . SqlTableIndex <$> nonEmpty pkFields
+-- | Traverses the given part of table and for every field which is some 'PrimaryKey'
+-- makes corresponding SQL index in the referred table.
+-- If a foreign key cannot be resolved within the given database, compile error arises.
+class AutoTableIndices be db entity where
+    autoTableIndices :: Proxy entity -> DatabaseSettings be db -> DList SqlIndex
+-- TODO: not only TableEntity
+instance (GAutoTableIndices be db (Rep (TableSettings table) ())) =>
+         AutoTableIndices be db (DatabaseEntity be db (TableEntity table)) where
+    autoTableIndices _ = autoTableIndices' (Proxy @(Rep (TableSettings table) ()))
+
+qeq =
+    let p = Proxy
+        _ = esCourses educatorSchema `asProxyTypeOf` p
+    in autoTableIndices @Int @EducatorSchema @(DatabaseEntity Int EducatorSchema (TableEntity CourseRowT))  Proxy educatorSchema
 
 -- | Traverses all tables in database and builds indices for all encountered 'PrimaryKey's.
-class GAutoDbIndices x where
-    autoDbIndices' :: x -> DList SqlIndex
-instance GAutoDbIndices (x p) => GAutoDbIndices (M1 i f x p) where
-    autoDbIndices' (M1 x) = autoDbIndices' x
-instance (GAutoDbIndices (x p), GAutoDbIndices (y p)) =>
-         GAutoDbIndices ((x :*: y) p) where
-    autoDbIndices' (x :*: y) = autoDbIndices' x <> autoDbIndices' y
-instance AutoEntityIndex be db tbl =>
-         GAutoDbIndices (Rec0 (DatabaseEntity be db tbl) p) where
-    autoDbIndices' (K1 entity) = maybe DL.empty DL.singleton (autoEntityIndex entity)
+class GAutoDbIndices be db x where
+    autoDbIndices' :: Proxy x -> DatabaseSettings be db -> DList SqlIndex
+instance GAutoDbIndices be db (x p) => GAutoDbIndices be db (M1 i f x p) where
+    autoDbIndices' _ = autoDbIndices' (Proxy @(x p))
+instance (GAutoDbIndices be db (x p), GAutoDbIndices be db (y p)) =>
+         GAutoDbIndices be db ((x :*: y) p) where
+    autoDbIndices' _ = autoDbIndices' (Proxy @(x p)) <> autoDbIndices' (Proxy @(y p))
+instance AutoTableIndices be db x => GAutoDbIndices be db (Rec0 x p) where
+    autoDbIndices' _ dbSettings = autoTableIndices (Proxy @x) dbSettings
 
 -- | Automatically creates indices for every 'PrimaryKey' embedded into a table.
 -- Resulting indices appear exactly in the order in which 'PrimaryKey's are encountered in
 -- the database. Indices may repeat (TODO: note that it is okay).
 defaultDbIndices
     :: forall be db.
-       (Generic (DatabaseSettings be db), GAutoDbIndices (Rep (DatabaseSettings be db) ()))
+       GAutoDbIndices be db (Rep (DatabaseSettings be db) ())
     => DatabaseSettings be db -> [SqlIndex]
 defaultDbIndices db =
-    toList $ autoDbIndices' (from @_ @() db)
+    toList $ autoDbIndices' @_ @_ @(Rep (DatabaseSettings be db) ()) Proxy db
 
 meme = defaultDbIndices educatorSchema
