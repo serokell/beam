@@ -1,5 +1,5 @@
+{-# LANGUAGE DeriveAnyClass       #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE DeriveAnyClass #-}
 
 module Database.Beam.Test.Schema
   ( EmployeeT(..), DepartmentT(..)
@@ -13,19 +13,23 @@ module Database.Beam.Test.Schema
 
   , tests ) where
 
-import           Database.Beam
-import           Database.Beam.Schema.Tables
-import           Database.Beam.Backend
-import           Database.Beam.Backend.SQL.AST
+import Database.Beam
+import Database.Beam.Backend
+import Database.Beam.Backend.SQL.AST
+import Database.Beam.Schema.Indices
+import Database.Beam.Schema.Tables
 
-import           Data.Monoid
-import           Data.Proxy
-import           Data.Text (Text)
+import Data.List (sort)
+import Data.Monoid
+import Data.Proxy
+import Data.Text (Text)
 import qualified Data.Text as T
-import           Data.Time.Clock (UTCTime)
+import Data.Time.Clock (UTCTime)
 
-import           Test.Tasty
-import           Test.Tasty.HUnit
+import GHC.Exts (fromList)
+
+import Test.Tasty
+import Test.Tasty.HUnit
 
 tests :: TestTree
 tests = testGroup "Schema Tests"
@@ -35,9 +39,11 @@ tests = testGroup "Schema Tests"
                   , parametricAndFixedNestedBeamsAreEquivalent
 --                  , automaticNestedFieldsAreUnset
 --                  , nullableForeignKeysGivenMaybeType
-                  , underscoresAreHandledGracefully ]
+                  , underscoresAreHandledGracefully
 --                  , dbSchemaGeneration ]
---                  , dbSchemaModification ]
+--                  , dbSchemaModification
+                  , indicesAreBuiltCorrectly
+                  ]
 
 data DummyBackend
 
@@ -47,17 +53,17 @@ instance BeamBackend DummyBackend where
 
 data EmployeeT f
   = EmployeeT
-  { _employeeFirstName :: Columnar f Text
-  , _employeeLastName  :: Columnar f Text
+  { _employeeFirstName   :: Columnar f Text
+  , _employeeLastName    :: Columnar f Text
   , _employeePhoneNumber :: Columnar f Text
 
-  , _employeeAge       :: Columnar f Int
-  , _employeeSalary    :: Columnar f Double
+  , _employeeAge         :: Columnar f Int
+  , _employeeSalary      :: Columnar f Double
 
-  , _employeeHireDate  :: Columnar f UTCTime
-  , _employeeLeaveDate :: Columnar f (Maybe UTCTime)
+  , _employeeHireDate    :: Columnar f UTCTime
+  , _employeeLeaveDate   :: Columnar f (Maybe UTCTime)
 
-  , _employeeCreated :: Columnar f UTCTime
+  , _employeeCreated     :: Columnar f UTCTime
   } deriving Generic
 instance Beamable EmployeeT
 instance Table EmployeeT where
@@ -104,8 +110,8 @@ basicSchemaGeneration =
 data RoleT f
   = RoleT
   { _roleForEmployee :: PrimaryKey EmployeeT f
-  , _roleName :: Columnar f Text
-  , _roleStarted :: Columnar f UTCTime }
+  , _roleName        :: Columnar f Text
+  , _roleStarted     :: Columnar f UTCTime }
   deriving Generic
 instance Beamable RoleT
 instance Table RoleT where
@@ -149,12 +155,12 @@ departmentTableSchema = defTblFieldSettings
 
 data FunnyT f
   = FunnyT
-  { funny_field1 :: Columnar f Text
-  , funny_field_2 :: Columnar f Text
-  , funny_first_name :: Columnar f Text
-  , _funny_lastName :: Columnar f Text
+  { funny_field1       :: Columnar f Text
+  , funny_field_2      :: Columnar f Text
+  , funny_first_name   :: Columnar f Text
+  , _funny_lastName    :: Columnar f Text
   , _funny_middle_Name :: Columnar f Text
-  , ___ :: Columnar f Int }
+  , ___                :: Columnar f Int }
   deriving Generic
 instance Beamable FunnyT
 instance Table FunnyT where
@@ -216,7 +222,7 @@ parametricAndFixedNestedBeamsAreEquivalent =
          (DatabaseEntity (DatabaseTable _ deptVehiculesB)) = _departmentVehiculesB employeeDbSettings
          deptVehiculesFieldNamesA = allBeamValues (\(Columnar' f) -> _fieldName f) deptVehiculesA
          deptVehiculesFieldNamesB = allBeamValues (\(Columnar' f) -> _fieldName f) deptVehiculesB
-         
+
      deptVehiculesFieldNamesB @?= deptVehiculesFieldNamesA
 
 
@@ -226,18 +232,18 @@ parametricAndFixedNestedBeamsAreEquivalent =
 type ADepartmentVehicule   = ADepartmentVehiculeT Identity
 type ADepartmentVehiculeT  = DepartamentRelatedT VehiculeInformationT VehiculeT
 data DepartamentRelatedT metaInfo prop f = DepartamentProperty
-      { _aDepartament  :: PrimaryKey DepartmentT f
-      , _aRelatesTo    :: prop f                -- checking we can nest both, nullable and non-nullable beams.
-      , _aMetaInfo     :: metaInfo (Nullable f)
+      { _aDepartament :: PrimaryKey DepartmentT f
+      , _aRelatesTo   :: prop f                -- checking we can nest both, nullable and non-nullable beams.
+      , _aMetaInfo    :: metaInfo (Nullable f)
       } deriving Generic
 
 type BDepartmentVehicule    = BDepartmentVehiculeT Identity
 data BDepartmentVehiculeT f = BDepartmentVehicule
-      { _bDepartament  :: PrimaryKey DepartmentT f
-      , _bRelatesTo    :: VehiculeT f                
-      , _bMetaInfo     :: VehiculeInformationT (Nullable f)
+      { _bDepartament :: PrimaryKey DepartmentT f
+      , _bRelatesTo   :: VehiculeT f
+      , _bMetaInfo    :: VehiculeInformationT (Nullable f)
       } deriving Generic
--- 
+--
 -- ["departament__name","relates_to__id","relates_to__type","relates_to__of_wheels","meta_info__price"]
 
 
@@ -246,8 +252,8 @@ instance (Beamable metaInfo, Beamable  prop) => Beamable (DepartamentRelatedT me
 
 
 instance (Table metaInfo, Table  prop) => Table    (DepartamentRelatedT metaInfo prop) where
-  data PrimaryKey (DepartamentRelatedT metaInfo prop) f = DepReKeyA (PrimaryKey DepartmentT f) 
-                                                                    (PrimaryKey prop f) 
+  data PrimaryKey (DepartamentRelatedT metaInfo prop) f = DepReKeyA (PrimaryKey DepartmentT f)
+                                                                    (PrimaryKey prop f)
                                                                     deriving(Generic)
   primaryKey = DepReKeyA <$> _aDepartament <*> (primaryKey._aRelatesTo)
 
@@ -284,11 +290,11 @@ instance Table VehiculeInformationT where
 
 
 
-instance Beamable BDepartmentVehiculeT 
+instance Beamable BDepartmentVehiculeT
 instance Beamable (PrimaryKey BDepartmentVehiculeT)
 instance Table BDepartmentVehiculeT where
-  data PrimaryKey BDepartmentVehiculeT f = DepReKeyB (PrimaryKey DepartmentT f) 
-                                                     (PrimaryKey VehiculeT   f) 
+  data PrimaryKey BDepartmentVehiculeT f = DepReKeyB (PrimaryKey DepartmentT f)
+                                                     (PrimaryKey VehiculeT   f)
                                                      deriving(Generic)
   primaryKey = DepReKeyB <$> _bDepartament <*> (primaryKey._bRelatesTo)
 
@@ -301,7 +307,7 @@ data EmployeeDb f
     { _employees            :: f (TableEntity EmployeeT)
     , _departments          :: f (TableEntity DepartmentT)
     , _roles                :: f (TableEntity RoleT)
-    , _funny                :: f (TableEntity FunnyT) 
+    , _funny                :: f (TableEntity FunnyT)
     , _departmentVehiculesA :: f (TableEntity ADepartmentVehiculeT)
     , _departmentVehiculesB :: f (TableEntity BDepartmentVehiculeT)
     } deriving Generic
@@ -314,7 +320,7 @@ employeeDbSettingsRuleMods :: DatabaseSettings be EmployeeDb
 employeeDbSettingsRuleMods = defaultDbSettings `withDbModification`
                              renamingFields (\field ->
                                                 case T.stripPrefix "funny" field of
-                                                  Nothing -> field
+                                                  Nothing      -> field
                                                   Just fieldNm -> "pfx_" <> field)
 
 -- employeeDbSettingsModified :: DatabaseSettings EmployeeDb
@@ -348,3 +354,88 @@ employeeDbSettingsRuleMods = defaultDbSettings `withDbModification`
 --                                  (EmployeeId (TableField "head__first_name" (DummyField True False (DummyFieldMaybe DummyFieldText)))
 --                                              (TableField "head__last_name" (DummyField True False (DummyFieldMaybe DummyFieldText)))
 --                                              (TableField "head__created" (DummyField True False (DummyFieldMaybe DummyFieldUTCTime))))
+
+-- * Indices are built correctly
+
+data ColonistT f = Colonist
+    { _cSpaceId  :: C f Int
+    , _cFullName :: C f Text
+    , _cFather   :: PrimaryKey ColonistT (Nullable f)
+    , _cOrigin   :: PrimaryKey PlanetT f
+    } deriving (Generic)
+
+data PlanetT f = Planet
+    { _pSpaceId           :: C f Int
+    , _pIntergalacticName :: C f Text
+    , _pDiameter          :: C f Int
+    } deriving (Generic)
+
+data ColonistDb f = ColonistDb
+    { _colonists :: f (TableEntity ColonistT)
+    , _planets   :: f (TableEntity PlanetT)
+    } deriving (Generic)
+
+instance Table ColonistT where
+    newtype PrimaryKey ColonistT f = ColonistId (C f Int)
+        deriving (Generic)
+    primaryKey = ColonistId . _cSpaceId
+
+instance Table PlanetT where
+    data PrimaryKey PlanetT f = PlanetId (C f Int) (C f Text)
+        deriving (Generic)
+    primaryKey = PlanetId <$> _pSpaceId <*> _pIntergalacticName
+
+instance Beamable ColonistT
+instance Beamable (PrimaryKey ColonistT)
+instance Beamable PlanetT
+instance Beamable (PrimaryKey PlanetT)
+
+colonistsDbSettings :: DatabaseSettings be ColonistDb
+colonistsDbSettings = defaultDbSettings
+
+colonistsTableSchema :: TableSettings ColonistT
+colonistsTableName :: Text
+(colonistsTableSchema, colonistsTableName) =
+    let DatabaseEntity (DatabaseTable tblName tableSettings) = _colonists colonistsDbSettings
+    in (tableSettings, tblName)
+
+planetsTableSchema :: TableSettings PlanetT
+planetsTableName :: Text
+(planetsTableSchema, planetsTableName) =
+    let DatabaseEntity (DatabaseTable tblName tableSettings) = _planets colonistsDbSettings
+    in (tableSettings, tblName)
+
+indicesAreBuiltCorrectly :: TestTree
+indicesAreBuiltCorrectly =
+  testCase "Indices are built correctly" $
+  do let colonistFieldNames = allBeamValues (\(Columnar' f) -> _fieldName f) colonistsTableSchema
+         planetFieldNames = allBeamValues (\(Columnar' f) -> _fieldName f) planetsTableSchema
+
+         extraIndices = mconcat
+            [ withTableIndex (_colonists colonistsDbSettings)
+                [ tableIndex _cOrigin
+                , tableIndex (_cFullName, _cFather)
+                ]
+            , withTableIndex (_planets colonistsDbSettings)
+                [ tableIndex _pSpaceId
+                ]
+            ]
+
+         autoIndices = defaultDbIndices colonistsDbSettings
+
+     extraIndices @?= [ SqlIndex colonistsTableName $
+                            SqlTableIndex (fromList [colonistFieldNames !! 3,
+                                                     colonistFieldNames !! 4])
+                      , SqlIndex colonistsTableName $
+                            SqlTableIndex (fromList [colonistFieldNames !! 1,
+                                                     colonistFieldNames !! 2])
+                      , SqlIndex planetsTableName $
+                            SqlTableIndex (fromList [planetFieldNames !! 0])
+                       ]
+
+     sort autoIndices @?= sort
+          [ SqlIndex colonistsTableName $
+                SqlTableIndex (fromList [colonistFieldNames !! 0])
+          , SqlIndex planetsTableName $
+                SqlTableIndex (fromList [planetFieldNames !! 0, planetFieldNames !! 1])
+            ]

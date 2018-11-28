@@ -32,6 +32,8 @@ library
 
                        Database.Beam.Schema
                        Database.Beam.Schema.Tables
+                       Database.Beam.Schema.Lookup
+                       Database.Beam.Schema.Indices
 
                        Database.Beam.Backend.Types
                        Database.Beam.Backend.URI
