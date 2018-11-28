@@ -5,6 +5,7 @@
 module Database.Beam.Schema.Indices
     ( SqlTableIndex (..)
     , SqlIndex (..)
+
     , FieldIndexBuilder (..)
     , IndexBuilder (..)
     , tableIndex
@@ -30,8 +31,6 @@ import GHC.TypeLits
 
 import Database.Beam.Schema.Tables
 
-import Debug.Trace
-
 -- | Single index settings for the given table.
 newtype SqlTableIndex = SqlTableIndex (NonEmpty Text)
     deriving (Show, Eq, Ord, Semigroup)
@@ -53,49 +52,6 @@ createIndex (SqlIndex tblNm (SqlTableIndex (toList -> fields))) =
     "ALTER TABLE " <> tblNm <>
     " CREATE INDEX IF NOT EXISTS " <> ("idx_" <> tblNm <> "_" <> T.intercalate "_" fields) <>
     " ON " <> tblNm <> "(" <> T.intercalate ", " fields <> ");"
-
--------------
--- Example --
--------------
-
-data CourseRowT f = CourseRow
-    { crId   :: C f Int
-    , crDesc :: C f Text
-    } deriving (Generic)
-
-data SubjectRowT f = SubjectRow
-    { srId     :: C f Int
-    , srDesc   :: C f Text
-    , srCourse :: PrimaryKey CourseRowT f
-    } deriving (Generic)
-
-data EducatorSchema f = EducatorSchema
-    { esCourses  :: f (TableEntity CourseRowT)
-    , esSubjects :: f (TableEntity SubjectRowT)
-    } deriving (Generic)
-
-instance Table CourseRowT where
-    newtype PrimaryKey CourseRowT f = CourseRowId (C f Int)
-        deriving (Generic)
-    primaryKey = CourseRowId . crId
-
-instance Table SubjectRowT where
-    newtype PrimaryKey SubjectRowT f = SubjectRowId (C f Int)
-        deriving (Generic)
-    primaryKey = SubjectRowId . srId
-
-instance Beamable CourseRowT
-instance Beamable (PrimaryKey CourseRowT)
-
-instance Beamable SubjectRowT
-instance Beamable (PrimaryKey SubjectRowT)
-
-educatorSchema :: DatabaseSettings be EducatorSchema
-educatorSchema = defaultDbSettings
-
------------------
--- Example end --
------------------
 
 -- * Manual indices definition
 
@@ -147,11 +103,6 @@ instance (IndexBuilder table a, IndexBuilder table b, IndexBuilder table c) =>
 tableIndex :: IndexBuilder table a => a -> TableSettings table -> SqlTableIndex
 tableIndex = flip buildIndex
 
-mem :: [SqlIndex]
-mem = withTableIndex (esSubjects educatorSchema) $
-    [ tableIndex (srCourse)
-    ]
-
 -- * Automatic indices definition
 
 class AutoEntityIndex be db tbl where
@@ -160,13 +111,13 @@ class AutoEntityIndex be db tbl where
 -- instances for all of them.
 instance {-# OVERLAPPABLE #-}
          AutoEntityIndex be db entity where
-    autoEntityIndex _ = trace "General entity" Nothing
+    autoEntityIndex _ = Nothing
 instance AutoEntityIndex be db (TableEntity table) where
     autoEntityIndex (DatabaseEntity (DatabaseTable tblName tblSettings)) =
         let pkFields = allBeamValues
                            (\(Columnar' (TableField fieldNm)) -> fieldNm)
                            (primaryKey tblSettings)
-        in trace "Table entity" $ SqlIndex tblName . SqlTableIndex <$> nonEmpty pkFields
+        in SqlIndex tblName . SqlTableIndex <$> nonEmpty pkFields
 
 -- | Traverses all tables in database and builds indices for all encountered 'PrimaryKey's.
 class GAutoDbIndices x where
@@ -189,5 +140,3 @@ defaultDbIndices
     => DatabaseSettings be db -> [SqlIndex]
 defaultDbIndices db =
     toList $ autoDbIndices' (from @_ @() db)
-
-meme = defaultDbIndices educatorSchema
