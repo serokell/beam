@@ -16,6 +16,7 @@ module Database.Beam.Test.Schema
 import Database.Beam
 import Database.Beam.Backend
 import Database.Beam.Backend.SQL.AST
+import Database.Beam.Schema.ForeignKeys
 import Database.Beam.Schema.Indices
 import Database.Beam.Schema.Tables
 
@@ -27,6 +28,8 @@ import qualified Data.Text as T
 import Data.Time.Clock (UTCTime)
 
 import GHC.Exts (fromList)
+
+import Lens.Micro
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -43,6 +46,7 @@ tests = testGroup "Schema Tests"
 --                  , dbSchemaGeneration ]
 --                  , dbSchemaModification
                   , indicesAreBuiltCorrectly
+                  , foreignKeysAreBuiltCorrectly
                   ]
 
 data DummyBackend
@@ -368,11 +372,18 @@ data PlanetT f = Planet
     { _pSpaceId           :: C f Int
     , _pIntergalacticName :: C f Text
     , _pDiameter          :: C f Int
+    , _pFounder           :: PrimaryKey ColonistT (Nullable f)
+    } deriving (Generic)
+
+-- just to check automatic derivation supports various kinds of entity.
+data DummyViewT f = DummyView
+    { _dvSomething :: C f Int
     } deriving (Generic)
 
 data ColonistDb f = ColonistDb
     { _colonists :: f (TableEntity ColonistT)
     , _planets   :: f (TableEntity PlanetT)
+    , _dummy     :: f (ViewEntity DummyViewT)
     } deriving (Generic)
 
 instance Table ColonistT where
@@ -389,6 +400,7 @@ instance Beamable ColonistT
 instance Beamable (PrimaryKey ColonistT)
 instance Beamable PlanetT
 instance Beamable (PrimaryKey PlanetT)
+instance Beamable DummyViewT
 
 colonistsDbSettings :: DatabaseSettings be ColonistDb
 colonistsDbSettings = defaultDbSettings
@@ -408,8 +420,8 @@ planetsTableName :: Text
 indicesAreBuiltCorrectly :: TestTree
 indicesAreBuiltCorrectly =
   testCase "Indices are built correctly" $
-  do let colonistFieldNames = allBeamValues (\(Columnar' f) -> _fieldName f) colonistsTableSchema
-         planetFieldNames = allBeamValues (\(Columnar' f) -> _fieldName f) planetsTableSchema
+  do let colonistsFieldNames = allBeamValues (\(Columnar' f) -> _fieldName f) colonistsTableSchema
+         planetsFieldNames = allBeamValues (\(Columnar' f) -> _fieldName f) planetsTableSchema
 
          extraIndices = mconcat
             [ withTableIndex (_colonists colonistsDbSettings)
@@ -424,18 +436,52 @@ indicesAreBuiltCorrectly =
          autoIndices = defaultDbIndices colonistsDbSettings
 
      extraIndices @?= [ SqlIndex colonistsTableName $
-                            SqlTableIndex (fromList [colonistFieldNames !! 3,
-                                                     colonistFieldNames !! 4])
+                            SqlTableIndex . fromList $ colonistsFieldNames ^.. (ix 3 <> ix 4)
                       , SqlIndex colonistsTableName $
-                            SqlTableIndex (fromList [colonistFieldNames !! 1,
-                                                     colonistFieldNames !! 2])
+                            SqlTableIndex . fromList $ colonistsFieldNames ^.. (ix 1 <> ix 2)
                       , SqlIndex planetsTableName $
-                            SqlTableIndex (fromList [planetFieldNames !! 0])
+                            SqlTableIndex . fromList $ planetsFieldNames ^.. ix 0
                        ]
 
      sort autoIndices @?= sort
           [ SqlIndex colonistsTableName $
-                SqlTableIndex (fromList [colonistFieldNames !! 0])
+                SqlTableIndex . fromList $ colonistsFieldNames ^.. ix 0
           , SqlIndex planetsTableName $
-                SqlTableIndex (fromList [planetFieldNames !! 0, planetFieldNames !! 1])
+                SqlTableIndex . fromList $ planetsFieldNames ^.. (ix 0 <> ix 1)
             ]
+
+-- * Foreign keys are built correctly
+
+foreignKeysAreBuiltCorrectly :: TestTree
+foreignKeysAreBuiltCorrectly =
+  testCase "Foreign keys are built correctly" $
+  do let colonistsFieldNames = allBeamValues (\(Columnar' f) -> _fieldName f) colonistsTableSchema
+         planetsFieldNames = allBeamValues (\(Columnar' f) -> _fieldName f) planetsTableSchema
+
+         autoTableFk = defaultTableForeignKeys colonistsDbSettings (_colonists colonistsDbSettings)
+         autoDbFk = defaultDbForeignKeys colonistsDbSettings
+
+     sort autoTableFk @?= sort
+          [ SqlForeignKey
+            { siTable = colonistsTableName
+            , siFields = fromList $ colonistsFieldNames ^.. (ix 3 <> ix 4)
+            , siReferredTable = planetsTableName
+            , siReferredFields = fromList $ planetsFieldNames ^.. (ix 0 <> ix 1)
+            }
+          , SqlForeignKey
+            { siTable = colonistsTableName
+            , siFields = fromList $ colonistsFieldNames ^.. ix 2
+            , siReferredTable = colonistsTableName
+            , siReferredFields = fromList $ colonistsFieldNames ^.. ix 0
+            }
+          ]
+
+     sort autoDbFk @?= sort (autoTableFk <>
+          [ SqlForeignKey
+            { siTable = planetsTableName
+            , siFields = fromList $ planetsFieldNames ^.. ix 3
+            , siReferredTable = colonistsTableName
+            , siReferredFields = fromList $ colonistsFieldNames ^.. ix 0
+            }
+          ]
+       )

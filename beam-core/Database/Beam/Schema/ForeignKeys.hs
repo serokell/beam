@@ -1,215 +1,136 @@
 {-# LANGUAGE CPP                  #-}
+{-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE ViewPatterns         #-}
 
-module Database.Beam.Schema.Indices
-    ( SqlTableIndex (..)
-    , SqlIndex (..)
-    , FieldIndexBuilder (..)
-    , IndexBuilder (..)
-    , tableIndex
-    , withTableIndex
-    , createIndex
-
-    , GAutoTableIndices (..)
-    , AutoTableIndices (..)
-    , GAutoDbIndices (..)
-    , defaultDbIndices
+module Database.Beam.Schema.ForeignKeys
+    ( SqlForeignKey (..)
+    , GAutoTableForeignKeys (..)
+    , AutoTableForeignKeys (..)
+    , GAutoDbForeignKeys (..)
+    , defaultTableForeignKeys
+    , defaultDbForeignKeys
     ) where
 
 import Data.DList (DList)
 import qualified Data.DList as DL
-import Data.Functor.Identity (Identity)
 import Data.List.NonEmpty (NonEmpty (..), nonEmpty)
 import Data.Proxy
 import Data.Text (Text)
-import qualified Data.Text as T
 
-import GHC.Exts (Constraint, fromList, toList)
+import GHC.Exts (toList)
 import GHC.Generics hiding (C, R)
 import GHC.Generics (Generic)
-import GHC.TypeLits
-
 
 import Database.Beam.Schema.Lookup
 import Database.Beam.Schema.Tables
 
--- | Single index settings for the given table.
-newtype SqlTableIndex = SqlTableIndex (NonEmpty Text)
-    deriving (Show, Eq, Ord, Semigroup)
+-- | Single foreign key settings.
+data SqlForeignKey = SqlForeignKey
+    { siTable          :: !Text
+    , siFields         :: !(NonEmpty Text)
+    , siReferredTable  :: !Text
+    , siReferredFields :: !(NonEmpty Text)
+    } deriving (Show, Eq, Ord)
 
--- | Single index settings.
-data SqlIndex = SqlIndex Text SqlTableIndex
-    deriving (Show, Eq, Ord)
+-- * Automatic foreign keys derivation
 
-withTableIndex
-    :: (Functor t)
-    => DatabaseEntity be db (TableEntity table)
-    -> t (TableSettings table -> SqlTableIndex)
-    -> t SqlIndex
-withTableIndex (DatabaseEntity (DatabaseTable tblNm tblSettings)) fetchIndices =
-    fmap (\makeIndex -> SqlIndex tblNm $ makeIndex tblSettings) fetchIndices
+buildSqlForeignKey
+    :: (Beamable (PrimaryKey tbl'), Table tbl')
+    => Text
+    -> [Text]
+    -> Text
+    -> TableSettings tbl'
+    -> DList SqlForeignKey
+buildSqlForeignKey tblNm fieldNames referredTblNm referredTblSettings = do
+    let referredFields = primaryKey referredTblSettings
+        referredFieldNames = allBeamValues unFieldName referredFields
+    -- we allow ourselves not to arise a compile-time error when the primary key is empty,
+    -- the user will have even larger problems in such case anyway.
+    maybe DL.empty DL.singleton $ do
+        let siTable = tblNm
+        siFields <- nonEmpty fieldNames
+        let siReferredTable = referredTblNm
+        siReferredFields <- nonEmpty referredFieldNames
+        return SqlForeignKey{..}
+  where
+    unFieldName (Columnar' (TableField fieldNm)) = fieldNm
 
-createIndex :: SqlIndex -> Text
-createIndex (SqlIndex tblNm (SqlTableIndex (toList -> fields))) =
-    "ALTER TABLE " <> tblNm <>
-    " CREATE INDEX IF NOT EXISTS " <> ("idx_" <> tblNm <> "_" <> T.intercalate "_" fields) <>
-    " ON " <> tblNm <> "(" <> T.intercalate ", " fields <> ");"
+-- | Generic helper for 'AutoTableIndices'.
+class GAutoTableForeignKeys be db x where
+    autoTableForeignKeys' :: x -> Text -> DatabaseSettings be db -> DList SqlForeignKey
+instance GAutoTableForeignKeys be db (x p) => GAutoTableForeignKeys be db (M1 i f x p) where
+    autoTableForeignKeys' (M1 x) = autoTableForeignKeys' x
+instance (GAutoTableForeignKeys be db (x p), GAutoTableForeignKeys be db (y p)) =>
+          GAutoTableForeignKeys be db ((x :*: y) p) where
+    autoTableForeignKeys' (x :*: y) = autoTableForeignKeys' x <> autoTableForeignKeys' y
 
--------------
--- Example --
--------------
+instance {-# OVERLAPPABLE #-} GAutoTableForeignKeys be db (Rec0 x p) where
+    autoTableForeignKeys' _ = mempty
 
-data CourseRowT f = CourseRow
-    { crId   :: C f Int
-    , crDesc :: C f Text
-    } deriving (Generic)
-
-data SubjectRowT f = SubjectRow
-    { srId     :: C f Int
-    , srDesc   :: C f Text
-    , srCourse :: PrimaryKey CourseRowT f
-    } deriving (Generic)
-
-data EducatorSchema f = EducatorSchema
-    { esCourses  :: f (TableEntity CourseRowT)
-    , esSubjects :: f (TableEntity SubjectRowT)
-    } deriving (Generic)
-
-instance Table CourseRowT where
-    newtype PrimaryKey CourseRowT f = CourseRowId (C f Int)
-        deriving (Generic)
-    primaryKey = CourseRowId . crId
-
-instance Table SubjectRowT where
-    newtype PrimaryKey SubjectRowT f = SubjectRowId (C f Int)
-        deriving (Generic)
-    primaryKey = SubjectRowId . srId
-
-instance Beamable CourseRowT
-instance Beamable (PrimaryKey CourseRowT)
-
-instance Beamable SubjectRowT
-instance Beamable (PrimaryKey SubjectRowT)
-
-educatorSchema :: DatabaseSettings be EducatorSchema
-educatorSchema = defaultDbSettings
-
------------------
--- Example end --
------------------
-
--- * Indices definition
-
-type family GIsNotEmptyData (item :: Symbol) (rep :: * -> *) :: Constraint where
-    GIsNotEmptyData item (D1 _d (C1 _c U1)) =
-        TypeError ('Text item ':<>: 'Text " without fields is not allowed here")
-    GIsNotEmptyData _ _ = ()
-
-type IsNotEmptyData item x = GIsNotEmptyData item (Rep x)
-
-class FieldIndexBuilder field where
-    buildFieldIndex :: field -> SqlTableIndex
-instance FieldIndexBuilder (TableField table a) where
-    buildFieldIndex field = SqlTableIndex . (:| []) $ _fieldName field
-instance (Beamable (PrimaryKey table),
-          IsNotEmptyData "Primary key" (PrimaryKey table Identity)) =>
-         FieldIndexBuilder (PrimaryKey table (TableField table')) where
-    buildFieldIndex =
-        SqlTableIndex . fromList .
-        allBeamValues (\(Columnar' (TableField fieldNm)) -> fieldNm)
-
-instance (Beamable (PrimaryKey table),
-          IsNotEmptyData "Primary key" (PrimaryKey table Identity)) =>
-         FieldIndexBuilder (PrimaryKey table (Nullable (TableField table'))) where
-    buildFieldIndex =
-        SqlTableIndex . fromList .
-        allBeamValues (\(Columnar' (TableField fieldNm)) -> fieldNm)
-
-class IndexBuilder table a where
-    buildIndex :: TableSettings table -> a -> SqlTableIndex
-
--- Written this way to make GHC resolve @f@ automatically at a call site.
--- | Instance for @table (TableField table) -> TableField table a@.
-instance (f ~ TableField table, FieldIndexBuilder field) =>
-         IndexBuilder table (table f -> field) where
-    buildIndex settings getter =
-        buildFieldIndex $ getter settings
-
-instance (IndexBuilder table a, IndexBuilder table b) =>
-         IndexBuilder table (a, b) where
-    buildIndex settings (a, b) = buildIndex settings a <> buildIndex settings b
-
-instance (IndexBuilder table a, IndexBuilder table b, IndexBuilder table c) =>
-         IndexBuilder table (a, b, c) where
-    buildIndex settings (a, b, c) =
-        buildIndex settings a <> buildIndex settings b <> buildIndex settings c
-
--- | Make a table index.
-tableIndex :: IndexBuilder table a => a -> TableSettings table -> SqlTableIndex
-tableIndex = flip buildIndex
-
-mem :: [SqlIndex]
-mem = withTableIndex (esSubjects educatorSchema) $
-    [ tableIndex (srCourse)
-    ]
-
--- | Generic helper for 'AutoTableindices'.
-class GAutoTableIndices be db x where
-    autoTableIndices' :: Proxy x -> DatabaseSettings be db -> DList SqlIndex
-instance GAutoTableIndices be db (x p) => GAutoTableIndices be db (M1 i f x p) where
-    autoTableIndices' _ = autoTableIndices' (Proxy @(x p))
-instance (GAutoTableIndices be db (x p), GAutoTableIndices be db (y p)) =>
-          GAutoTableIndices be db ((x :*: y) p) where
-    autoTableIndices' _ = autoTableIndices' (Proxy @(x p)) <> autoTableIndices' (Proxy @(y p))
-instance GAutoTableIndices be db (Rec0 x p) where
-    autoTableIndices' _ = mempty
-instance {-# OVERLAPPING #-}
-         GetDbEntity TableEntity tbl be db =>
-         GAutoTableIndices be db (Rec0 (PrimaryKey tbl f) p) where
-    autoTableIndices' _ dbSettings = do
-        DatabaseEntity (DatabaseTable tblNm tableSettings) <-
+instance GetDbEntity TableEntity tbl be db =>
+         GAutoTableForeignKeys be db (Rec0 (PrimaryKey tbl (TableField tbl')) p) where
+    autoTableForeignKeys' (K1 key) referringTblNm dbSettings = do
+        DatabaseEntity (DatabaseTable referredTblNm referredTblSettings) <-
             pure $ getDbEntity (Proxy @TableEntity) (Proxy @tbl) dbSettings
-        let referedFields = primaryKey tableSettings
-            fieldNames = allBeamValues (\(Columnar' (TableField fieldNm)) -> fieldNm) referedFields
-        -- we allow ourselves not to arise a compile-time error when the primary key is empty,
-        -- the user will have even larger problems in such case anyway.
-        maybe DL.empty (DL.singleton . SqlIndex tblNm . SqlTableIndex) (nonEmpty fieldNames)
+        let fieldNames = allBeamValues (\(Columnar' (TableField fieldNm)) -> fieldNm) key
+        buildSqlForeignKey referringTblNm fieldNames referredTblNm referredTblSettings
 
--- | Traverses the given part of table and for every field which is some 'PrimaryKey'
--- makes corresponding SQL index in the referred table.
+instance GetDbEntity TableEntity tbl be db =>
+         GAutoTableForeignKeys be db (Rec0 (PrimaryKey tbl (Nullable (TableField tbl'))) p) where
+    autoTableForeignKeys' (K1 key) referringTblNm dbSettings = do
+        DatabaseEntity (DatabaseTable referredTblNm referredTblSettings) <-
+            pure $ getDbEntity (Proxy @TableEntity) (Proxy @tbl) dbSettings
+        let fieldNames = allBeamValues (\(Columnar' (TableField fieldNm)) -> fieldNm) key
+        buildSqlForeignKey referringTblNm fieldNames referredTblNm referredTblSettings
+
+-- | Traverses the table and for every field which is some 'PrimaryKey' makes a
+-- corresponding SQL index in the referred table.
 -- If a foreign key cannot be resolved within the given database, compile error arises.
-class AutoTableIndices be db entity where
-    autoTableIndices :: Proxy entity -> DatabaseSettings be db -> DList SqlIndex
--- TODO: not only TableEntity
-instance (GAutoTableIndices be db (Rep (TableSettings table) ())) =>
-         AutoTableIndices be db (DatabaseEntity be db (TableEntity table)) where
-    autoTableIndices _ = autoTableIndices' (Proxy @(Rep (TableSettings table) ()))
+class AutoTableForeignKeys be db entity where
+    autoTableForeignKeys :: entity -> DatabaseSettings be db -> DList SqlForeignKey
+instance {-# OVERLAPPABLE #-}
+         (be ~ be', db ~ db') =>
+         AutoTableForeignKeys be db (DatabaseEntity be' db' (entity (table :: (* -> *) -> *))) where
+    autoTableForeignKeys _ = mempty
+instance (Generic (TableSettings table),
+          GAutoTableForeignKeys be db (Rep (TableSettings table) ()),
+          be ~ be', db ~ db'
+         ) =>
+         AutoTableForeignKeys be db (DatabaseEntity be' db' (TableEntity table)) where
+    autoTableForeignKeys (DatabaseEntity (DatabaseTable tblName tblSettings)) =
+        autoTableForeignKeys' (from @_ @() tblSettings) tblName
 
-qeq =
-    let p = Proxy
-        _ = esCourses educatorSchema `asProxyTypeOf` p
-    in autoTableIndices @Int @EducatorSchema @(DatabaseEntity Int EducatorSchema (TableEntity CourseRowT))  Proxy educatorSchema
-
--- | Traverses all tables in database and builds indices for all encountered 'PrimaryKey's.
-class GAutoDbIndices be db x where
-    autoDbIndices' :: Proxy x -> DatabaseSettings be db -> DList SqlIndex
-instance GAutoDbIndices be db (x p) => GAutoDbIndices be db (M1 i f x p) where
-    autoDbIndices' _ = autoDbIndices' (Proxy @(x p))
-instance (GAutoDbIndices be db (x p), GAutoDbIndices be db (y p)) =>
-         GAutoDbIndices be db ((x :*: y) p) where
-    autoDbIndices' _ = autoDbIndices' (Proxy @(x p)) <> autoDbIndices' (Proxy @(y p))
-instance AutoTableIndices be db x => GAutoDbIndices be db (Rec0 x p) where
-    autoDbIndices' _ dbSettings = autoTableIndices (Proxy @x) dbSettings
-
--- | Automatically creates indices for every 'PrimaryKey' embedded into a table.
+-- | Automatically creates indices for every 'PrimaryKey' embedded into the given table.
 -- Resulting indices appear exactly in the order in which 'PrimaryKey's are encountered in
 -- the database. Indices may repeat (TODO: note that it is okay).
-defaultDbIndices
-    :: forall be db.
-       GAutoDbIndices be db (Rep (DatabaseSettings be db) ())
-    => DatabaseSettings be db -> [SqlIndex]
-defaultDbIndices db =
-    toList $ autoDbIndices' @_ @_ @(Rep (DatabaseSettings be db) ()) Proxy db
+defaultTableForeignKeys
+    :: (Generic (TableSettings table),
+        GAutoTableForeignKeys be db (Rep (TableSettings table) ()))
+    => DatabaseSettings be db
+    -> DatabaseEntity be db (TableEntity table)
+    -> [SqlForeignKey]
+defaultTableForeignKeys dbSettings dbTable =
+    toList $ autoTableForeignKeys dbTable dbSettings
 
-meme = defaultDbIndices educatorSchema
+-- | Traverses all tables in database and builds indices for all encountered 'PrimaryKey's.
+class GAutoDbForeignKeys be db x where
+    autoDbForeignKeys' :: x -> DatabaseSettings be db -> DList SqlForeignKey
+instance GAutoDbForeignKeys be db (x p) => GAutoDbForeignKeys be db (M1 i f x p) where
+    autoDbForeignKeys' (M1 x) = autoDbForeignKeys' x
+instance (GAutoDbForeignKeys be db (x p), GAutoDbForeignKeys be db (y p)) =>
+         GAutoDbForeignKeys be db ((x :*: y) p) where
+    autoDbForeignKeys' (x :*: y) = autoDbForeignKeys' x <> autoDbForeignKeys' y
+instance AutoTableForeignKeys be db x => GAutoDbForeignKeys be db (Rec0 x p) where
+    autoDbForeignKeys' (K1 x) dbSettings = autoTableForeignKeys x dbSettings
+
+-- | Automatically creates indices for every 'PrimaryKey' embedded into a table of the
+-- given schema.
+-- Resulting indices appear exactly in the order in which 'PrimaryKey's are encountered in
+-- the database. Indices may repeat (TODO: note that it is okay).
+defaultDbForeignKeys
+    :: forall be db.
+       (Generic (DatabaseSettings be db),
+        GAutoDbForeignKeys be db (Rep (DatabaseSettings be db) ()))
+    => DatabaseSettings be db -> [SqlForeignKey]
+defaultDbForeignKeys db =
+    toList $ autoDbForeignKeys' (from @_ @() db) db

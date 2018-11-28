@@ -20,7 +20,7 @@ module Database.Beam.Schema.Indices
 import Data.DList (DList)
 import qualified Data.DList as DL
 import Data.Functor.Identity (Identity)
-import Data.List.NonEmpty (NonEmpty (..), nonEmpty)
+import Data.List.NonEmpty (NonEmpty (..), nonEmpty, sort)
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -33,10 +33,15 @@ import Database.Beam.Schema.Tables
 
 -- | Single index settings for the given table.
 newtype SqlTableIndex = SqlTableIndex (NonEmpty Text)
-    deriving (Show, Eq, Ord, Semigroup)
+    deriving (Show, Semigroup)
+
+instance Eq SqlTableIndex where
+    SqlTableIndex f1 == SqlTableIndex f2 = sort f1 == sort f2
+instance Ord SqlTableIndex where
+    SqlTableIndex f1 `compare` SqlTableIndex f2 = sort f1 `compare` sort f2
 
 -- | Single index settings.
-data SqlIndex = SqlIndex Text SqlTableIndex
+data SqlIndex = SqlIndex !Text !SqlTableIndex
     deriving (Show, Eq, Ord)
 
 withTableIndex
