@@ -113,7 +113,7 @@ buildSqlForeignKey tblNm fieldNames referredTblNm referredTblSettings onDelete o
   where
     unFieldName (Columnar' (TableField fieldNm)) = fieldNm
 
--- | Generic helper for 'AutoTableIndices'.
+-- | Generic helper for 'AutoTableForeignKeys'.
 class GAutoTableForeignKeys be db x where
     autoTableForeignKeys' :: x -> Text -> DatabaseSettings be db -> DList SqlForeignKey
 instance GAutoTableForeignKeys be db (x p) => GAutoTableForeignKeys be db (M1 i f x p) where

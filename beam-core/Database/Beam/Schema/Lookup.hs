@@ -70,7 +70,10 @@ type family GetDbTableAssertOneFound' (db :: (* -> *) -> *)
                    ':<>: 'ShowType db
                    ':<>: 'Text "' has "
                    ':<>: 'ShowType n
-                   ':<>: 'Text " tables of such type.")
+                   ':<>: 'Text " tables of such type."
+                   ':$$: 'Text "Hint: consider adding a phantom type parameter to the "
+                   ':<>: 'Text "table datatype so that all its occurrences get "
+                   ':<>: 'Text "distinguishable.")
 
 -- | Constrain the number of found tables to exactly one.
 type GetDbTableAssertOneFound db table found =

@@ -5,6 +5,7 @@
 module Database.Beam.Schema.Indices
     ( SqlTableIndex (..)
     , SqlIndex (..)
+    , SqlTableIndexBuilder
 
     , FieldIndexBuilder (..)
     , IndexBuilder (..)
@@ -44,13 +45,18 @@ instance Ord SqlTableIndex where
 data SqlIndex = SqlIndex !Text !SqlTableIndex
     deriving (Show, Eq, Ord)
 
+newtype SqlTableIndexBuilder table = SqlTableIndexBuilder (TableSettings table -> SqlTableIndex)
+
+-- | Create indices for the given table.
+--   In most cases you probably want it to accept a list of builders created with 'tableIndex'.
 withTableIndex
     :: (Functor t)
     => DatabaseEntity be db (TableEntity table)
-    -> t (TableSettings table -> SqlTableIndex)
+    -> t (SqlTableIndexBuilder table)
     -> t SqlIndex
 withTableIndex (DatabaseEntity (DatabaseTable tblNm tblSettings)) fetchIndices =
-    fmap (\makeIndex -> SqlIndex tblNm $ makeIndex tblSettings) fetchIndices
+    fmap (\(SqlTableIndexBuilder makeIndex) -> SqlIndex tblNm $ makeIndex tblSettings)
+         fetchIndices
 
 createIndex :: SqlIndex -> Text
 createIndex (SqlIndex tblNm (SqlTableIndex (toList -> fields))) =
@@ -88,8 +94,7 @@ instance (Beamable (PrimaryKey table),
 class IndexBuilder table a where
     buildIndex :: TableSettings table -> a -> SqlTableIndex
 
--- Written this way to make GHC resolve @f@ automatically at a call site.
--- | Instance for @table (TableField table) -> TableField table a@.
+-- | Field accessors are building blocks for indices.
 instance (f ~ TableField table, FieldIndexBuilder field) =>
          IndexBuilder table (table f -> field) where
     buildIndex settings getter =
@@ -104,9 +109,10 @@ instance (IndexBuilder table a, IndexBuilder table b, IndexBuilder table c) =>
     buildIndex settings (a, b, c) =
         buildIndex settings a <> buildIndex settings b <> buildIndex settings c
 
--- | Make a table index.
-tableIndex :: IndexBuilder table a => a -> TableSettings table -> SqlTableIndex
-tableIndex = flip buildIndex
+-- | Make a table index builder covering the specified fields.
+--   Basic usage is to pass a table field accesor or a tuple of them to this function.
+tableIndex :: IndexBuilder table a => a -> SqlTableIndexBuilder table
+tableIndex = SqlTableIndexBuilder . flip buildIndex
 
 -- * Automatic indices definition
 
@@ -137,8 +143,8 @@ instance AutoEntityIndex be db tbl =>
     autoDbIndices' (K1 entity) = maybe DL.empty DL.singleton (autoEntityIndex entity)
 
 -- | Automatically creates indices for every 'PrimaryKey' embedded into a table.
--- Resulting indices appear exactly in the order in which 'PrimaryKey's are encountered in
--- the database. Indices may repeat (TODO: note that it is okay).
+--   Resulting indices appear exactly in the order in which 'PrimaryKey's are encountered in
+--   the database. Indices may repeat (TODO: note that it is okay).
 defaultDbIndices
     :: forall be db.
        (Generic (DatabaseSettings be db), GAutoDbIndices (Rep (DatabaseSettings be db) ()))

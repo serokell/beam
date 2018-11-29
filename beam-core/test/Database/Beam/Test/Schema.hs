@@ -434,7 +434,7 @@ indicesAreBuiltCorrectly =
                 , tableIndex (_cFullName, _cFather)
                 ]
             , withTableIndex (_planets colonistsDbSettings)
-                [ tableIndex _pSpaceId
+                [ tableIndex (_pSpaceId, (_pSpaceId, _pSpaceId))
                 ]
             ]
 
