@@ -125,7 +125,7 @@ instance (GAutoTableForeignKeys be db (x p), GAutoTableForeignKeys be db (y p)) 
 instance {-# OVERLAPPABLE #-} GAutoTableForeignKeys be db (Rec0 x p) where
     autoTableForeignKeys' _ = mempty
 
-instance (GetDbEntity TableEntity tbl' be db,
+instance (GetDbEntity TableEntity DatabaseEntity tbl' be db,
           ReferencesTable tbl tbl') =>
          GAutoTableForeignKeys be db (Rec0 (PrimaryKey tbl' (TableField tbl)) p) where
 
@@ -139,7 +139,7 @@ instance (GetDbEntity TableEntity tbl' be db,
         buildSqlForeignKey referringTblNm fieldNames referredTblNm referredTblSettings
                            onDelete onUpdate
 
-instance (GetDbEntity TableEntity tbl' be db,
+instance (GetDbEntity TableEntity DatabaseEntity tbl' be db,
           ReferencesTable tbl tbl') =>
          GAutoTableForeignKeys be db (Rec0 (PrimaryKey tbl' (Nullable (TableField tbl))) p) where
 

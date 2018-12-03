@@ -9,6 +9,7 @@ import Database.Beam.Migrate.Serialization
 import Database.Beam.Migrate.Types.Predicates
 import Database.Beam.Migrate.SQL.SQL92
 
+import Data.Set (Set)
 import Data.Aeson ((.:), (.=), withObject, object)
 import Data.Aeson.Types (Parser, Value)
 import Data.Hashable (Hashable(..))
@@ -19,6 +20,7 @@ import           Data.Semigroup
 #endif
 
 import GHC.Generics (Generic)
+import GHC.Exts (toList)
 
 
 -- * Table checks
@@ -121,6 +123,31 @@ instance DatabasePredicate TableHasPrimaryKey where
     | Just (TableExistsPredicate tblNm') <- cast p' = tblNm' == tblNm
     | otherwise = False
 
+-- | Asserts that the given table has a primary key made of the given columns.
+-- The order of the columns is significant.
+data TableHasIndex
+  = TableHasIndex
+  { hasIndex_table :: Text   {-^ Table name -}
+  , hasIndex_cols  :: Set Text {-^ Column names -}
+  } deriving (Show, Eq, Generic)
+instance Hashable TableHasIndex where
+    hashWithSalt salt (TableHasIndex tbl cols) = hashWithSalt salt (tbl, toList cols)
+instance DatabasePredicate TableHasIndex where
+  englishDescription (TableHasIndex tblName colNames) =
+    "Table " <> show tblName <> " has index " <> show colNames
+
+  predicateSpecificity _ = PredicateSpecificityAllBackends
+
+  serializePredicate (TableHasIndex tbl cols) =
+    object [ "has-index" .= object [ "table" .= tbl
+                                   , "columns" .= cols ] ]
+
+  -- we do not provide cascading delete of 'TableHasColumn' check,
+  -- index should be removed explicitely first
+  predicateCascadesDropOn (TableHasIndex tblNm _) p'
+    | Just (TableExistsPredicate tblNm') <- cast p' = tblNm' == tblNm
+    | otherwise = False
+
 -- * Deserialization
 
 -- | 'BeamDeserializers' for all the predicates defined in this module
@@ -135,6 +162,7 @@ beamCheckDeserializers = mconcat
   , beamDeserializer (const deserializeTableHasPrimaryKeyPredicate)
   , beamDeserializer deserializeTableHasColumnPredicate
   , beamDeserializer deserializeTableColumnHasConstraintPredicate
+  , beamDeserializer (const deserializeTableHasIndexPredicate)
   ]
   where
     deserializeTableExistsPredicate :: Value -> Parser SomeDatabasePredicate
@@ -170,3 +198,11 @@ beamCheckDeserializers = mconcat
        fmap (id @(TableColumnHasConstraint (Sql92DdlCommandColumnSchemaSyntax cmd)))
          (TableColumnHasConstraint <$> v' .: "table" <*> v' .: "column"
                                    <*> (beamDeserialize d =<< v' .: "constraint")))
+
+    deserializeTableHasIndexPredicate :: Value -> Parser SomeDatabasePredicate
+    deserializeTableHasIndexPredicate =
+      withObject "TableHasIndex" $ \v ->
+      v .: "has-index" >>=
+      (withObject "TableHasIndex" $ \v' ->
+       SomeDatabasePredicate <$>
+         (TableHasIndex <$> v' .: "table" <*> v' .: "columns"))

@@ -1,5 +1,5 @@
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE CPP #-}
 
 -- | Postgres extensions are run-time loadable plugins that can extend Postgres
 -- functionality. Extensions are part of the database schema.
@@ -11,23 +11,23 @@
 -- regular parts of beam migrations.
 module Database.Beam.Postgres.Extensions where
 
-import           Database.Beam
-import           Database.Beam.Schema.Tables
+import Database.Beam
+import Database.Beam.Schema.Tables
 
-import           Database.Beam.Postgres.Types
-import           Database.Beam.Postgres.Syntax
+import Database.Beam.Postgres.Syntax
+import Database.Beam.Postgres.Types
 
-import           Database.Beam.Migrate
+import Database.Beam.Migrate
 
-import           Control.Monad
+import Control.Monad
 
-import           Data.Aeson
+import Data.Aeson
+import Data.Hashable (Hashable)
 import qualified Data.HashSet as HS
-import           Data.Hashable (Hashable)
-import           Data.Proxy
-import           Data.Text (Text)
+import Data.Proxy
+import Data.Text (Text)
 #if !MIN_VERSION_base(4, 11, 0)
-import           Data.Semigroup
+import Data.Semigroup
 #endif
 
 -- *** Embedding extensions in databases
@@ -116,6 +116,7 @@ instance IsCheckedDatabaseEntity Postgres (PgExtensionEntity extension) where
   collectEntityChecks (CheckedPgExtension (PgDatabaseExtension {})) =
     [ SomeDatabasePredicate (PgHasExtension (pgExtensionName (Proxy @extension))) ]
   checkedDbEntityAuto _ = CheckedPgExtension . dbEntityAuto
+  addIndexChecks = const
 
 -- | Get the extension record from a database entity. See the documentation for
 -- 'PgExtensionEntity'.
