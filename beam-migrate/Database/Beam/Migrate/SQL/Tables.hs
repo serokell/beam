@@ -1,8 +1,8 @@
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 module Database.Beam.Migrate.SQL.Tables
   ( -- * Table manipulation
@@ -40,26 +40,26 @@ module Database.Beam.Migrate.SQL.Tables
   ) where
 
 import Database.Beam
-import Database.Beam.Schema.Tables
 import Database.Beam.Backend.SQL
+import Database.Beam.Schema.Tables
 
-import Database.Beam.Migrate.Types
 import Database.Beam.Migrate.Checks
-import Database.Beam.Migrate.SQL.Types
 import Database.Beam.Migrate.SQL.SQL92
+import Database.Beam.Migrate.SQL.Types
+import Database.Beam.Migrate.Types
 
 import Control.Applicative
 import Control.Monad.Identity
-import Control.Monad.Writer.Strict
 import Control.Monad.State
+import Control.Monad.Writer.Strict
 
-import Data.Text (Text)
-import Data.Vector (Vector)
 import Data.ByteString (ByteString)
-import Data.Typeable
-import Data.Time (LocalTime, TimeOfDay)
-import Data.Scientific (Scientific)
 import qualified Data.Kind as Kind (Constraint)
+import Data.Scientific (Scientific)
+import Data.Text (Text)
+import Data.Time (LocalTime, TimeOfDay)
+import Data.Typeable
+import Data.Vector (Vector)
 
 import GHC.TypeLits
 
@@ -117,12 +117,12 @@ preserve (CheckedDatabaseEntity desc checks) = pure (CheckedDatabaseEntity desc 
 -- | A column in the process of being altered
 data ColumnMigration a
   = ColumnMigration
-  { columnMigrationFieldName :: Text
+  { columnMigrationFieldName   :: Text
   , columnMigrationFieldChecks :: [FieldCheck] }
 
 -- | Monad representing a series of @ALTER TABLE@ statements
 newtype TableMigration syntax a
-  = TableMigration (WriterT [Sql92DdlCommandAlterTableSyntax syntax] (State (Text, [TableCheck])) a)
+  = TableMigration (WriterT [Sql92DdlCommandAlterTableSyntax syntax] (State (Text, [SomeTableCheck])) a)
   deriving (Monad, Applicative, Functor)
 
 -- | @ALTER TABLE ... RENAME TO@ command
@@ -200,7 +200,7 @@ alterTable (CheckedDatabaseEntity (CheckedDatabaseTable (DatabaseTable tblNm tbl
                       tbl tblFieldChecks
 
      TableMigration alterColumns' = alterColumns initialTbl
-     ((newTbl, cmds), (tblNm', tblChecks')) = runState (runWriterT alterColumns') (tblNm, tblChecks)
+     ((newTbl, cmds), (tblNm', tblChecks')) = runState (runWriterT alterColumns') (tblNm, map SomeTableCheck tblChecks)
 
      fieldChecks' = changeBeamRep (\(Columnar' (ColumnMigration _ checks) :: Columnar' ColumnMigration a) ->
                                      Columnar' (Const checks) :: Columnar' (Const [FieldCheck]) a)
@@ -209,7 +209,7 @@ alterTable (CheckedDatabaseEntity (CheckedDatabaseTable (DatabaseTable tblNm tbl
                               Columnar' (TableField nm) :: Columnar' (TableField table') a)
                           newTbl
  in forM_ cmds (\cmd -> upDown (alterTableCmd cmd) Nothing) >>
-    pure (CheckedDatabaseEntity (CheckedDatabaseTable (DatabaseTable tblNm' tbl') tblChecks' fieldChecks') entityChecks)
+    pure (CheckedDatabaseEntity (CheckedDatabaseTable (DatabaseTable tblNm' tbl') (givenTableChecks tblChecks') fieldChecks') entityChecks)
 
 -- * Fields
 

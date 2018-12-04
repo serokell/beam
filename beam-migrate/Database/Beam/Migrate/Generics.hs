@@ -61,3 +61,7 @@ withIndices checkedDbSettings indices =
           pure $ CheckedDatabaseEntity (addIndexChecks dbSettings indexEntity) dbPredicates
         )
         checkedDbSettings indices
+
+withDefaultForeignKeys
+    :: CheckedDatabaseSettings be db -> CheckedDatabaseSettings be db
+withDefaultForeignKeys db = undefined

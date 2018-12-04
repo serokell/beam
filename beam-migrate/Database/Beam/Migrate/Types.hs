@@ -1,8 +1,8 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE CPP                        #-}
+{-# LANGUAGE DeriveTraversable          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 module Database.Beam.Migrate.Types
   ( -- * Checked database entities
@@ -31,8 +31,9 @@ module Database.Beam.Migrate.Types
   , p
 
     -- * Entity checks
-  , TableCheck(..), DomainCheck(..)
-  , FieldCheck(..)
+  , TableCheck(..), SomeTableCheck(..)
+  , DomainCheck(..), FieldCheck(..)
+  , givenTableChecks
 
     -- * Migrations
   , MigrationStep(..), MigrationSteps(..)
@@ -49,9 +50,9 @@ module Database.Beam.Migrate.Types
 import Database.Beam.Migrate.Types.CheckedEntities
 import Database.Beam.Migrate.Types.Predicates
 
-import Control.Monad.Free.Church
 import Control.Arrow
 import Control.Category (Category)
+import Control.Monad.Free.Church
 
 #if !MIN_VERSION_base(4, 11, 0)
 import Data.Semigroup
@@ -98,14 +99,14 @@ instance Semigroup MigrationDataLoss where
 
 instance Monoid MigrationDataLoss where
     mempty = MigrationKeepsData
-    mappend MigrationLosesData _ = MigrationLosesData
-    mappend _ MigrationLosesData = MigrationLosesData
+    mappend MigrationLosesData _                  = MigrationLosesData
+    mappend _ MigrationLosesData                  = MigrationLosesData
     mappend MigrationKeepsData MigrationKeepsData = MigrationKeepsData
 
 -- | A migration command along with metadata on wheth
 data MigrationCommand cmd
   = MigrationCommand
-  { migrationCommand :: cmd
+  { migrationCommand                 :: cmd
     -- ^ The command to run
   , migrationCommandDataLossPossible :: MigrationDataLoss
     -- ^ Information on whether the migration loses data
@@ -184,7 +185,7 @@ migrationDataLoss go = runF go (\_ -> MigrationKeepsData)
                          (\(MigrationRunCommand _ x next) ->
                             case x of
                               Nothing -> MigrationLosesData
-                              _ -> next)
+                              _       -> next)
 
 -- | Run a 'MigrationSteps' without executing any of the commands against a
 -- database.
@@ -200,4 +201,3 @@ stepNames (MigrationSteps f) = runF (runKleisli f ()) (\_ x -> x) (\(MigrationSt
   where
     runMigration :: forall a'. Migration syntax a' -> a'
     runMigration migration = runF migration id (\(MigrationRunCommand _ _ next) -> next)
-

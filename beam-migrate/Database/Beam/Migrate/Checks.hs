@@ -8,6 +8,8 @@ module Database.Beam.Migrate.Checks where
 import Database.Beam.Migrate.Serialization
 import Database.Beam.Migrate.Types.Predicates
 import Database.Beam.Migrate.SQL.SQL92
+import Database.Beam.Schema.Indices
+import Database.Beam.Schema.Tables
 
 import Data.Set (Set)
 import Data.Aeson ((.:), (.=), withObject, object)
@@ -20,7 +22,7 @@ import           Data.Semigroup
 #endif
 
 import GHC.Generics (Generic)
-import GHC.Exts (toList)
+import GHC.Exts (fromList, toList)
 
 
 -- * Table checks
@@ -147,6 +149,17 @@ instance DatabasePredicate TableHasIndex where
   predicateCascadesDropOn (TableHasIndex tblNm _) p'
     | Just (TableExistsPredicate tblNm') <- cast p' = tblNm' == tblNm
     | otherwise = False
+
+-- | Convert gathered indices into checks.
+entityIndicesToChecks
+    :: (Table table)
+    => EntityIndices be db (TableEntity table) -> [TableCheck table]
+entityIndicesToChecks (EntityIndices mkTableIndices) =
+    flip map mkTableIndices $ \mkTableIndex ->
+        TableCheck $ \tblNm tblSettings ->
+          let dbEntity = DatabaseEntity (DatabaseTable tblNm tblSettings)
+              TableIndex index = mkTableIndex dbEntity
+          in SomeDatabasePredicate $ TableHasIndex tblNm (fromList $ toList index)
 
 -- * Deserialization
 

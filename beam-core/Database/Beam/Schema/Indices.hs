@@ -56,13 +56,13 @@ newtype TableIndexBuilder table = TableIndexBuilder (TableSettings table -> Tabl
 --   necessary. Under this scheme, the field can be renamed using the 'IsString'
 --   instance for 'TableField', or the 'fieldNamed' function.
 newtype EntityIndices be db entity = EntityIndices
-    { _entityIndices :: DatabaseEntity be db entity -> [TableIndex]
+    { _entityIndices :: [DatabaseEntity be db entity -> TableIndex]
     } deriving (Semigroup, Monoid)
 
 type DatabaseIndices be db = db (EntityIndices be db)
 
 -- | Return empty 'DatabaseIndices' (not counting indices created automatically like
--- primary key index). You can use it like
+--   primary key index). You can use it like
 --
 -- > dbIndices { tbl1 = tableIndex field1 <> tableIndex (field2, field3) }
 dbIndices :: forall be db. Database be db => DatabaseIndices be db
@@ -77,6 +77,7 @@ withTableIndex (DatabaseEntity (DatabaseTable tblNm tblSettings)) fetchIndices =
     fmap (\(TableIndexBuilder makeIndex) -> Index tblNm $ makeIndex tblSettings)
          fetchIndices
 
+-- TODO make part of relevant 'ActionProvider' / create dedicated syntax
 createIndex :: Index -> Text
 createIndex (Index tblNm (TableIndex (toList -> fields))) =
     "ALTER TABLE " <> tblNm <>
@@ -138,4 +139,4 @@ tableIndex
     => a
     -> EntityIndices be db (TableEntity table)
 tableIndex builder = EntityIndices $
-    \(DatabaseEntity (DatabaseTable _ tblSettings)) -> [buildIndex tblSettings builder]
+    [\(DatabaseEntity (DatabaseTable _ tblSettings)) -> buildIndex tblSettings builder]

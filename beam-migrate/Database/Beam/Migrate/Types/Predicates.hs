@@ -5,9 +5,10 @@ import Database.Beam
 
 import Control.DeepSeq
 
+import Data.Maybe (catMaybes)
 import Data.Aeson
-import Data.Text (Text)
 import Data.Hashable
+import Data.Text (Text)
 import Data.Typeable
 
 -- * Predicates
@@ -71,12 +72,12 @@ data PredicateSpecificity
 instance Hashable PredicateSpecificity
 
 instance ToJSON PredicateSpecificity where
-  toJSON PredicateSpecificityAllBackends = "all"
-  toJSON (PredicateSpecificityOnlyBackend s)  = object [ "backend" .= toJSON s ]
+  toJSON PredicateSpecificityAllBackends     = "all"
+  toJSON (PredicateSpecificityOnlyBackend s) = object [ "backend" .= toJSON s ]
 instance FromJSON PredicateSpecificity where
-  parseJSON "all" = pure PredicateSpecificityAllBackends
+  parseJSON "all"      = pure PredicateSpecificityAllBackends
   parseJSON (Object o) = PredicateSpecificityOnlyBackend <$> o .: "backend"
-  parseJSON _ = fail "PredicateSource"
+  parseJSON _          = fail "PredicateSource"
 
 -- | Convenience synonym for 'SomeDatabasePredicate'
 p :: DatabasePredicate p => p -> SomeDatabasePredicate
@@ -91,7 +92,15 @@ p = SomeDatabasePredicate
 --   been determined.
 
 -- | A predicate that depends on the name of a table as well as its fields
-newtype TableCheck = TableCheck (forall tbl. Table tbl => Text -> tbl (TableField tbl) -> SomeDatabasePredicate)
+newtype TableCheck tbl = TableCheck (Text -> tbl (TableField tbl) -> SomeDatabasePredicate)
+
+-- | Allows to drop all checks into one pack, used in migration state
+data SomeTableCheck = forall tbl. (Typeable tbl, Table tbl) => SomeTableCheck (TableCheck tbl)
+
+-- | Leave only checks for the given table.
+givenTableChecks :: Typeable tbl => [SomeTableCheck] -> [TableCheck tbl]
+givenTableChecks =
+    catMaybes . map (\(SomeTableCheck check) -> cast check)
 
 -- | A predicate that depends on the name of a domain type
 newtype DomainCheck = DomainCheck (Text -> SomeDatabasePredicate)

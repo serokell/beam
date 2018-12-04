@@ -20,7 +20,6 @@ import Data.Proxy
 import Data.String
 import Data.Text (Text)
 
-import GHC.Exts (fromList, toList)
 import GHC.Generics
 import GHC.Types
 
@@ -102,7 +101,7 @@ instance Beamable tbl => IsCheckedDatabaseEntity be (TableEntity tbl) where
   data CheckedDatabaseEntityDescriptor be (TableEntity tbl) where
     CheckedDatabaseTable :: Table tbl
                          => DatabaseEntityDescriptor be (TableEntity tbl)
-                         -> [ TableCheck ]
+                         -> [ TableCheck tbl ]
                          -> tbl (Const [FieldCheck])
                          -> CheckedDatabaseEntityDescriptor be (TableEntity tbl)
 
@@ -131,14 +130,9 @@ instance Beamable tbl => IsCheckedDatabaseEntity be (TableEntity tbl) where
         fieldChecks = to (gDefaultTblSettingsChecks syntax (Proxy @(Rep (tbl Identity))) False)
     in CheckedDatabaseTable (dbEntityAuto tblTypeName) tblChecks fieldChecks
 
-  addIndexChecks (CheckedDatabaseTable dbTable@(DatabaseTable tbl _) tblChecks tblFieldChecks)
-                 (EntityIndices tblIndices) =
-    let indexChecks = map (\(TableIndex cols) ->
-                            TableCheck (\_ _ ->
-                               let cols' = fromList $ toList cols
-                               in SomeDatabasePredicate (TableHasIndex tbl cols')))
-                          (tblIndices (DatabaseEntity dbTable))
-    in CheckedDatabaseTable dbTable (indexChecks ++ tblChecks) tblFieldChecks
+  addIndexChecks (CheckedDatabaseTable dbTable@(DatabaseTable _ _) tblChecks tblFieldChecks)
+                 entityIndices =
+    CheckedDatabaseTable dbTable (entityIndicesToChecks entityIndices ++ tblChecks) tblFieldChecks
 
 
 -- | Purposefully opaque type describing how to modify a table field. Used to

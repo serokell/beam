@@ -3,6 +3,7 @@
 module Database.Beam.Schema.Lookup
     ( GGetDbEntity (..)
     , GetDbEntity (..)
+    , module Database.Beam.Schema.Lookup
     ) where
 
 import Data.Proxy
