@@ -200,7 +200,7 @@ alterTable (CheckedDatabaseEntity (CheckedDatabaseTable (DatabaseTable tblNm tbl
                       tbl tblFieldChecks
 
      TableMigration alterColumns' = alterColumns initialTbl
-     ((newTbl, cmds), (tblNm', tblChecks')) = runState (runWriterT alterColumns') (tblNm, map SomeTableCheck tblChecks)
+     ((newTbl, cmds), (tblNm', tblChecks')) = runState (runWriterT alterColumns') (tblNm, SomeTableCheck <$> tblChecks)
 
      fieldChecks' = changeBeamRep (\(Columnar' (ColumnMigration _ checks) :: Columnar' ColumnMigration a) ->
                                      Columnar' (Const checks) :: Columnar' (Const [FieldCheck]) a)

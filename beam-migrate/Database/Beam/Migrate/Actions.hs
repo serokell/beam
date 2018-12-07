@@ -1,10 +1,10 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE BangPatterns    #-}
+{-# LANGUAGE CPP             #-}
+{-# LANGUAGE DeriveGeneric   #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE TupleSections   #-}
+{-# LANGUAGE TypeOperators   #-}
 
 -- | Data types and functions to discover sequences of DDL commands to go from
 -- one database state to another. Used for migration generation.
@@ -89,29 +89,31 @@ module Database.Beam.Migrate.Actions
   , heuristicSolver
   ) where
 
-import           Database.Beam.Migrate.Types
-import           Database.Beam.Migrate.Checks
-import           Database.Beam.Migrate.SQL
+import Database.Beam.Migrate.Checks
+import Database.Beam.Migrate.SQL
+import Database.Beam.Migrate.Types
+import Database.Beam.Schema.Indices
 
-import           Control.Applicative
-import           Control.DeepSeq
-import           Control.Monad
-import           Control.Parallel.Strategies
+import Control.Applicative
+import Control.DeepSeq
+import Control.Monad
+import Control.Parallel.Strategies
 
-import           Data.Foldable
+import Data.Foldable
 
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
+import Data.List (sort)
 import qualified Data.PQueue.Min as PQ
 import qualified Data.Sequence as Seq
-import           Data.Text (Text)
+import Data.Text (Text)
 import qualified Data.Text as T
-import           Data.Typeable
+import Data.Typeable
 #if !MIN_VERSION_base(4, 11, 0)
-import           Data.Semigroup
+import Data.Semigroup
 #endif
 
-import           GHC.Generics
+import GHC.Generics
 
 -- | Used to indicate whether a particular predicate is from the initial
 -- database state, or due to a sequence of actions we've committed too. Used to
@@ -125,12 +127,12 @@ instance NFData DatabaseStateSource
 -- | Represents the state of a database as a migration is being generated
 data DatabaseState cmd
   = DatabaseState
-  { dbStateCurrentState       :: !(HM.HashMap SomeDatabasePredicate DatabaseStateSource)
+  { dbStateCurrentState :: !(HM.HashMap SomeDatabasePredicate DatabaseStateSource)
     -- ^ The current set of predicates that apply to this database as well as
     -- their source (user or from previous actions)
-  , dbStateKey                :: !(HS.HashSet SomeDatabasePredicate)
+  , dbStateKey          :: !(HS.HashSet SomeDatabasePredicate)
     -- ^ HS.fromMap of 'dbStateCurrentState', for maximal sharing
-  , dbStateCmdSequence        :: !(Seq.Seq (MigrationCommand cmd))
+  , dbStateCmdSequence  :: !(Seq.Seq (MigrationCommand cmd))
     -- ^ The current sequence of commands we've committed to in this state
   } deriving Show
 
@@ -177,13 +179,13 @@ data PotentialAction cmd
     -- ^ Preconditions that will no longer apply
   , actionPostConditions :: !(HS.HashSet SomeDatabasePredicate)
     -- ^ Conditions that will apply after we're done
-  , actionCommands :: !(Seq.Seq (MigrationCommand cmd))
+  , actionCommands       :: !(Seq.Seq (MigrationCommand cmd))
     -- ^ The sequence of commands that accomplish this movement in the database
     -- graph. For an edge, 'actionCommands' contains one command; for a path, it
     -- will contain more.
-  , actionEnglish  :: !Text
+  , actionEnglish        :: !Text
     -- ^ An english description of the movement
-  , actionScore    :: {-# UNPACK #-} !Int
+  , actionScore          :: {-# UNPACK #-} !Int
     -- ^ A heuristic notion of complexity or weight; used to find the "easiest"
     -- path through the graph.
   }
@@ -262,11 +264,14 @@ instance Monoid (ActionProvider cmd) where
        withStrategy (rparWith (parList rseq)) bRes `seq`
        aRes ++ bRes
 
-createTableWeight, dropTableWeight, addColumnWeight, dropColumnWeight :: Int
+createTableWeight, dropTableWeight, addColumnWeight, dropColumnWeight,
+  addIndexWeight, dropIndexWeight :: Int
 createTableWeight = 500
 dropTableWeight = 100
 addColumnWeight = 1
 dropColumnWeight = 1
+addIndexWeight = 1
+dropIndexWeight = 1
 
 -- | Proceeds only if no predicate matches the given pattern. See the
 -- implementation of 'dropTableActionProvider' for an example of usage.
@@ -278,7 +283,7 @@ ensuringNot_ _  = empty
 -- implementation of 'createTableActionProvider' for an example of usage.
 justOne_ :: [ a ] -> [ a ]
 justOne_ [x] = [x]
-justOne_ _ = []
+justOne_ _   = []
 
 -- | Action provider for SQL92 @CREATE TABLE@ actions.
 createTableActionProvider :: forall cmd
@@ -459,6 +464,49 @@ dropColumnNullProvider = ActionProvider provider
                                (Seq.singleton (MigrationCommand cmd MigrationKeepsData))
                                ("Drop not null constraint for " <> colNm <> " on " <> tblNm) 100)
 
+-- | Action provider for SQL92 @ALTER TABLE ... ADD INDEX ...@ actions
+addIndexProvider :: forall cmd
+                   . ( Sql92SaneDdlCommandSyntaxMigrateOnly cmd
+                     , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
+                   => ActionProvider cmd
+addIndexProvider =
+  ActionProvider provider
+  where
+    provider :: ActionProviderFn cmd
+    provider findPreConditions findPostConditions =
+      do idxP@(TableHasIndex tblNm colNms) <- findPostConditions
+         TableExistsPredicate tblNm' <- findPreConditions
+         guard (tblNm' == tblNm)
+         ensuringNot_ $ do
+           TableHasIndex tblNm'' colNms' :: TableHasIndex <- findPreConditions
+           guard (tblNm'' == tblNm && colNms == colNms') -- An index on these columns already exists
+
+         let cmd = alterTableCmd (alterTableSyntax tblNm (addIndexSyntax idxNm colNms))
+             idxNm = mkIndexName tblNm colNms
+         pure (PotentialAction mempty (HS.fromList [SomeDatabasePredicate idxP])
+                               (Seq.singleton (MigrationCommand cmd MigrationKeepsData))
+                               ("Add index " <> T.intercalate "," colNms <> " to " <> tblNm)
+                (addIndexWeight + fromIntegral (sum $ map T.length (tblNm : colNms))))
+
+
+-- | Action provider for SQL92 @ALTER TABLE ... DROP INDEX ...@ actions
+dropIndexProvider :: forall cmd
+                    . ( Sql92SaneDdlCommandSyntaxMigrateOnly cmd
+                      , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
+                   => ActionProvider cmd
+dropIndexProvider = ActionProvider provider
+  where
+    provider :: ActionProviderFn cmd
+    provider findPreConditions _ =
+      do idxP@(TableHasIndex tblNm colNms) <- findPreConditions
+
+         let cmd = alterTableCmd (alterTableSyntax tblNm (dropIndexSyntax idxNm))
+             idxNm = mkIndexName tblNm colNms
+         pure (PotentialAction (HS.fromList [SomeDatabasePredicate idxP]) mempty
+                               (Seq.singleton (MigrationCommand cmd MigrationKeepsData))
+                               ("Drop index " <> T.intercalate "," colNms <> " from " <> tblNm)
+                (dropIndexWeight + fromIntegral (sum $ map T.length (tblNm : colNms))))
+
 -- | Default action providers for any SQL92 compliant syntax.
 --
 -- In particular, this provides edges consisting of the following statements:
@@ -468,6 +516,8 @@ dropColumnNullProvider = ActionProvider provider
 --  * ALTER TABLE ... ADD COLUMN ...
 --  * ALTER TABLE ... DROP COLUMN ...
 --  * ALTER TABLE ... ALTER COLUMN ... SET [NOT] NULL
+--  * ALTER TABLE ... ADD INDEX ...
+--  * ALTER TABLE ... DROP INDEX ...
 defaultActionProvider :: ( Sql92SaneDdlCommandSyntaxMigrateOnly cmd
                          , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
                       => ActionProvider cmd
@@ -480,7 +530,11 @@ defaultActionProvider =
   , dropColumnProvider
 
   , addColumnNullProvider
-  , dropColumnNullProvider ]
+  , dropColumnNullProvider
+
+    -- TODO: these two should apply to postgress only
+  , addIndexProvider
+  , dropIndexProvider ]
 
 -- | Represents current state of a database graph search.
 --

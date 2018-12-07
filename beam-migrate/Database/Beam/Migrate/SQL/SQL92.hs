@@ -1,5 +1,5 @@
+{-# LANGUAGE CPP             #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE CPP #-}
 
 -- | Finally-tagless encoding of SQL92 DDL commands.
 --
@@ -37,6 +37,7 @@ type Sql92SaneDdlCommandSyntaxMigrateOnly cmd =
   , Sql92AlterTableColumnSchemaSyntax
       (Sql92AlterTableAlterTableActionSyntax (Sql92DdlCommandAlterTableSyntax cmd)) ~
       Sql92CreateTableColumnSchemaSyntax (Sql92DdlCommandCreateTableSyntax cmd)
+  , IsSql92AlterTableIndexSyntax (Sql92AlterTableAlterTableActionSyntax (Sql92DdlCommandAlterTableSyntax cmd))
   )
 
 type Sql92DdlCommandDataTypeSyntax syntax =
@@ -112,6 +113,10 @@ class ( IsSql92ColumnSchemaSyntax (Sql92AlterTableColumnSchemaSyntax syntax)
 
 class IsSql92AlterColumnActionSyntax syntax where
   setNotNullSyntax, setNullSyntax :: syntax
+
+class IsSql92AlterTableIndexSyntax syntax where
+  addIndexSyntax :: Text -> [Text] -> syntax
+  dropIndexSyntax :: Text -> syntax
 
 class ( IsSql92ColumnConstraintDefinitionSyntax (Sql92ColumnSchemaColumnConstraintDefinitionSyntax columnSchema)
       , IsSql92DataTypeSyntax (Sql92ColumnSchemaColumnTypeSyntax columnSchema)

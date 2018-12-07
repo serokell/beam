@@ -5,7 +5,7 @@ import Database.Beam
 
 import Control.DeepSeq
 
-import Data.Maybe (catMaybes)
+import Data.Maybe
 import Data.Aeson
 import Data.Hashable
 import Data.Text (Text)
@@ -35,12 +35,20 @@ class (Typeable p, Hashable p, Eq p) => DatabasePredicate p where
   -- order for a table to have a column, that table must exist. This function
   -- takes in the current predicate and another arbitrary database predicate. It
   -- should return 'True' if this predicate needs the other predicate to be true
-  -- in order to exist.
+  -- in order to exist. Once the predicate on which the given one depends does
+  -- not hold, the given predicate is removed without any additional actions.
   --
   -- By default, this simply returns 'False', which makes sense for many
   -- predicates.
   predicateCascadesDropOn :: DatabasePredicate p' => p -> p' -> Bool
   predicateCascadesDropOn _ _ = False
+
+  -- | Similarly to 'predicateCascadesDropOn', should return 'True' if this predicate
+  -- needs another one to be true in order to exist. The difference is, the other
+  -- predicate cannot be removed until this one exists, this predicate has to be
+  -- explicitely removed with a corresponding action first.
+  predicateRestrictDropOf :: DatabasePredicate p' => p -> p' -> Bool
+  predicateRestrictDropOf _ _ = False
 
 -- | A Database predicate is a value of any type which satisfies
 -- 'DatabasePredicate'. We often want to store these in lists and sets, so we
@@ -99,8 +107,7 @@ data SomeTableCheck = forall tbl. (Typeable tbl, Table tbl) => SomeTableCheck (T
 
 -- | Leave only checks for the given table.
 givenTableChecks :: Typeable tbl => [SomeTableCheck] -> [TableCheck tbl]
-givenTableChecks =
-    catMaybes . map (\(SomeTableCheck check) -> cast check)
+givenTableChecks = catMaybes . map (\(SomeTableCheck check) -> cast check)
 
 -- | A predicate that depends on the name of a domain type
 newtype DomainCheck = DomainCheck (Text -> SomeDatabasePredicate)

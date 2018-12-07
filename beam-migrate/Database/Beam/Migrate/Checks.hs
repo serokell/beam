@@ -11,7 +11,6 @@ import Database.Beam.Migrate.SQL.SQL92
 import Database.Beam.Schema.Indices
 import Database.Beam.Schema.Tables
 
-import Data.Set (Set)
 import Data.Aeson ((.:), (.=), withObject, object)
 import Data.Aeson.Types (Parser, Value)
 import Data.Hashable (Hashable(..))
@@ -130,7 +129,7 @@ instance DatabasePredicate TableHasPrimaryKey where
 data TableHasIndex
   = TableHasIndex
   { hasIndex_table :: Text   {-^ Table name -}
-  , hasIndex_cols  :: Set Text {-^ Column names -}
+  , hasIndex_cols  :: [Text] {-^ Column names -}
   } deriving (Show, Eq, Generic)
 instance Hashable TableHasIndex where
     hashWithSalt salt (TableHasIndex tbl cols) = hashWithSalt salt (tbl, toList cols)
@@ -138,7 +137,7 @@ instance DatabasePredicate TableHasIndex where
   englishDescription (TableHasIndex tblName colNames) =
     "Table " <> show tblName <> " has index " <> show colNames
 
-  predicateSpecificity _ = PredicateSpecificityAllBackends
+  predicateSpecificity _ = PredicateSpecificityOnlyBackend ""
 
   serializePredicate (TableHasIndex tbl cols) =
     object [ "has-index" .= object [ "table" .= tbl
@@ -149,6 +148,13 @@ instance DatabasePredicate TableHasIndex where
   predicateCascadesDropOn (TableHasIndex tblNm _) p'
     | Just (TableExistsPredicate tblNm') <- cast p' = tblNm' == tblNm
     | otherwise = False
+
+  -- TODO: how to say that we cannot delete a column while an index on it exists?
+  -- This does not work since 'TableHasColumn' is polymorphic other used syntax, and
+  -- we don't know which index to get here
+
+  -- predicateRestrictDropOf (TableHasIndex tblNm _) p'
+  --   | Just (TableHasColumn tblNm' _ _) <- cast p' = tblNm' == tblNm
 
 -- | Convert gathered indices into checks.
 entityIndicesToChecks

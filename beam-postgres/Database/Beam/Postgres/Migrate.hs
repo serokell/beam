@@ -1,10 +1,10 @@
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS_GHC -fno-warn-orphans -fno-warn-type-defaults #-}
 
 -- | Migrations support for beam-postgres. See "Database.Beam.Migrate" for more
@@ -25,49 +25,49 @@ module Database.Beam.Postgres.Migrate
   , smallserial, serial, bigserial
   ) where
 
-import           Database.Beam.Backend.SQL
-import           Database.Beam.Migrate.Actions (defaultActionProvider)
+import Database.Beam.Backend.SQL
+import Database.Beam.Migrate.Actions (defaultActionProvider)
 import qualified Database.Beam.Migrate.Backend as Tool
 import qualified Database.Beam.Migrate.Checks as Db
-import           Database.Beam.Migrate.SQL.BeamExtensions
-import qualified Database.Beam.Migrate.SQL as Db
 import qualified Database.Beam.Migrate.Serialization as Db
+import qualified Database.Beam.Migrate.SQL as Db
+import Database.Beam.Migrate.SQL.BeamExtensions
 import qualified Database.Beam.Migrate.Types as Db
 
-import           Database.Beam.Postgres.Connection
-import           Database.Beam.Postgres.PgSpecific
-import           Database.Beam.Postgres.Syntax
-import           Database.Beam.Postgres.Types
-import           Database.Beam.Postgres.Extensions
+import Database.Beam.Postgres.Connection
+import Database.Beam.Postgres.Extensions
+import Database.Beam.Postgres.PgSpecific
+import Database.Beam.Postgres.Syntax
+import Database.Beam.Postgres.Types
 
-import           Database.Beam.Haskell.Syntax
+import Database.Beam.Haskell.Syntax
 
 import qualified Database.PostgreSQL.Simple as Pg
-import qualified Database.PostgreSQL.Simple.Types as Pg
 import qualified Database.PostgreSQL.Simple.TypeInfo.Static as Pg
+import qualified Database.PostgreSQL.Simple.Types as Pg
 
-import           Control.Arrow
-import           Control.Exception (bracket)
-import           Control.Monad
-import           Control.Monad.Free.Church (liftF)
+import Control.Arrow
+import Control.Exception (bracket)
+import Control.Monad
+import Control.Monad.Free.Church (liftF)
 
-import           Data.Aeson hiding (json)
-import           Data.Bits
-import           Data.Maybe
-import           Data.ByteString (ByteString)
+import Data.Aeson hiding (json)
+import Data.Bits
+import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as BCL
-import           Data.String
-import           Data.Int
+import Data.Int
+import Data.Maybe
+import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import Data.Typeable
+import Data.UUID.Types (UUID)
 import qualified Data.Vector as V
-import           Data.UUID.Types (UUID)
-import           Data.Typeable
 #if !MIN_VERSION_base(4, 11, 0)
-import           Data.Semigroup
+import Data.Semigroup
 #else
-import           Data.Monoid (Endo(..))
+import Data.Monoid (Endo (..))
 #endif
 
 -- | Top-level migration backend for use by @beam-migrate@ tools
@@ -303,6 +303,7 @@ getDbConstraints conn =
                                            , "WHERE c.relkind='r' AND i.indisprimary GROUP BY relname, i.indrelid" ]))
 
      pure (tblsExist ++ columnChecks ++ primaryKeys)
+     -- TODO: do not forget to update this
 
 -- * Postgres-specific data types
 

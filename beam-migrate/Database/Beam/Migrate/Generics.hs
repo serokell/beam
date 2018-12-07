@@ -64,4 +64,4 @@ withIndices checkedDbSettings indices =
 
 withDefaultForeignKeys
     :: CheckedDatabaseSettings be db -> CheckedDatabaseSettings be db
-withDefaultForeignKeys db = undefined
+withDefaultForeignKeys _ = undefined
