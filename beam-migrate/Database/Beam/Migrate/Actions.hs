@@ -103,7 +103,6 @@ import Data.Foldable
 
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
-import Data.List (sort)
 import qualified Data.PQueue.Min as PQ
 import qualified Data.Sequence as Seq
 import Data.Text (Text)

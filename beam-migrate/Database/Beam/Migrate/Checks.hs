@@ -161,10 +161,10 @@ entityIndicesToChecks
     :: (Table table)
     => EntityIndices be db (TableEntity table) -> [TableCheck table]
 entityIndicesToChecks (EntityIndices mkTableIndices) =
-    flip map mkTableIndices $ \mkTableIndex ->
+    flip map (toList mkTableIndices) $ \mkTableIndex ->
         TableCheck $ \tblNm tblSettings ->
           let dbEntity = DatabaseEntity (DatabaseTable tblNm tblSettings)
-              TableIndex index = mkTableIndex dbEntity
+              Index _ (TableIndex index) = mkTableIndex dbEntity
           in SomeDatabasePredicate $ TableHasIndex tblNm (fromList $ toList index)
 
 -- * Deserialization

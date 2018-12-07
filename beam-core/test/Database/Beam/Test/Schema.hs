@@ -402,6 +402,8 @@ instance Beamable PlanetT
 instance Beamable (PrimaryKey PlanetT)
 instance Beamable DummyViewT
 
+instance Database be ColonistDb
+
 instance ReferencesTable ColonistT ColonistT where
     referenceOnDelete _ _ = Just SqlCascade
 instance ReferencesTable ColonistT PlanetT
@@ -428,31 +430,30 @@ indicesAreBuiltCorrectly =
   do let colonistsFieldNames = allBeamValues (\(Columnar' f) -> _fieldName f) colonistsTableSchema
          planetsFieldNames = allBeamValues (\(Columnar' f) -> _fieldName f) planetsTableSchema
 
-         extraIndices = mconcat
-            [ withTableIndex (_colonists colonistsDbSettings)
+         extraIndices = buildDbIndices colonistsDbSettings dbIndices
+            { _colonists = mconcat
                 [ tableIndex _cOrigin
                 , tableIndex (_cFullName, _cFather)
                 ]
-            , withTableIndex (_planets colonistsDbSettings)
-                [ tableIndex (_pSpaceId, (_pSpaceId, _pSpaceId))
-                ]
-            ]
+            , _planets =
+                tableIndex _pSpaceId
+            }
 
-         autoIndices = defaultDbIndices colonistsDbSettings
+         autoIndices = buildDbIndices colonistsDbSettings defaultDbIndices
 
-     extraIndices @?= [ SqlIndex colonistsTableName $
-                            SqlTableIndex . fromList $ colonistsFieldNames ^.. (ix 3 <> ix 4)
-                      , SqlIndex colonistsTableName $
-                            SqlTableIndex . fromList $ colonistsFieldNames ^.. (ix 1 <> ix 2)
-                      , SqlIndex planetsTableName $
-                            SqlTableIndex . fromList $ planetsFieldNames ^.. ix 0
+     extraIndices @?= [ Index colonistsTableName $
+                            TableIndex . fromList $ colonistsFieldNames ^.. (ix 3 <> ix 4)
+                      , Index colonistsTableName $
+                            TableIndex . fromList $ colonistsFieldNames ^.. (ix 1 <> ix 2)
+                      , Index planetsTableName $
+                            TableIndex . fromList $ planetsFieldNames ^.. ix 0
                        ]
 
      sort autoIndices @?= sort
-          [ SqlIndex colonistsTableName $
-                SqlTableIndex . fromList $ colonistsFieldNames ^.. ix 0
-          , SqlIndex planetsTableName $
-                SqlTableIndex . fromList $ planetsFieldNames ^.. (ix 0 <> ix 1)
+          [ Index colonistsTableName $
+                TableIndex . fromList $ colonistsFieldNames ^.. ix 0
+          , Index planetsTableName $
+                TableIndex . fromList $ planetsFieldNames ^.. (ix 0 <> ix 1)
             ]
 
 -- * Foreign keys are built correctly

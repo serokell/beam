@@ -8,7 +8,7 @@
 module Database.Beam.Migrate.Generics
  ( -- * Default checked database settings
    defaultMigratableDbSettings
- , withIndices
+ , withDbIndices
 
  -- * Extending the defaulting sytem
  , HasDefaultSqlDataType(..), HasDefaultSqlDataTypeConstraints(..)
@@ -46,15 +46,15 @@ defaultMigratableDbSettings =
 -- @
 -- defaultMigratableDbSettings
 --     `withDbModification` dbModification{ ... }
---     `withIndices` dbIndices{ ... }
+--     `withDbIndices` dbIndices{ ... }
 -- @
-withIndices
+withDbIndices
     :: forall be db.
        Database be db
     => CheckedDatabaseSettings be db
     -> DatabaseIndices be db
     -> CheckedDatabaseSettings be db
-withIndices checkedDbSettings indices =
+withDbIndices checkedDbSettings indices =
     runIdentity $
     zipTables (Proxy @be)
         (\(CheckedDatabaseEntity dbSettings dbPredicates) indexEntity ->
