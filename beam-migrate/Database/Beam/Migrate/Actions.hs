@@ -81,7 +81,10 @@ module Database.Beam.Migrate.Actions
   , addColumnProvider
   , addColumnNullProvider
   , dropColumnNullProvider
+  , addIndexProvider
+  , dropIndexProvider
   , defaultActionProvider
+  , indexActionProvider
 
   -- * Solver
   , Solver(..), FinalSolution(..)
@@ -463,9 +466,11 @@ dropColumnNullProvider = ActionProvider provider
                                (Seq.singleton (MigrationCommand cmd MigrationKeepsData))
                                ("Drop not null constraint for " <> colNm <> " on " <> tblNm) 100)
 
--- | Action provider for SQL92 @ALTER TABLE ... ADD INDEX ...@ actions
+-- | Action provider for SQL92 @ALTER TABLE ... ADD INDEX ...@ actions.
 addIndexProvider :: forall cmd
                    . ( Sql92SaneDdlCommandSyntaxMigrateOnly cmd
+                      , IsSql92AlterTableIndexSyntax (Sql92AlterTableAlterTableActionSyntax
+                                                      (Sql92DdlCommandAlterTableSyntax cmd))
                      , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
                    => ActionProvider cmd
 addIndexProvider =
@@ -473,31 +478,34 @@ addIndexProvider =
   where
     provider :: ActionProviderFn cmd
     provider findPreConditions findPostConditions =
-      do idxP@(TableHasIndex tblNm colNms) <- findPostConditions
+      do idxP@(TableHasIndex tblNm colNms opts) <- findPostConditions
          TableExistsPredicate tblNm' <- findPreConditions
          guard (tblNm' == tblNm)
          ensuringNot_ $ do
-           TableHasIndex tblNm'' colNms' :: TableHasIndex <- findPreConditions
+           TableHasIndex tblNm'' colNms' _ :: TableHasIndex <- findPreConditions
            guard (tblNm'' == tblNm && colNms == colNms') -- An index on these columns already exists
 
-         let cmd = alterTableCmd (alterTableSyntax tblNm (addIndexSyntax idxNm colNms))
+         let cmd = alterTableCmd (alterTableSyntax tblNm (addIndexSyntax idxNm colNms opts))
              idxNm = mkIndexName tblNm colNms
          pure (PotentialAction mempty (HS.fromList [SomeDatabasePredicate idxP])
                                (Seq.singleton (MigrationCommand cmd MigrationKeepsData))
                                ("Add index " <> T.intercalate "," colNms <> " to " <> tblNm)
                 (addIndexWeight + fromIntegral (sum $ map T.length (tblNm : colNms))))
 
-
--- | Action provider for SQL92 @ALTER TABLE ... DROP INDEX ...@ actions
+-- | Action provider for SQL92 @ALTER TABLE ... DROP INDEX ...@ actions.
+-- Note that this is not included into 'defaultActionProvider', consider adding
+-- 'indexActionProvider' to your migration backend if your engine supports that.
 dropIndexProvider :: forall cmd
                     . ( Sql92SaneDdlCommandSyntaxMigrateOnly cmd
+                      , IsSql92AlterTableIndexSyntax (Sql92AlterTableAlterTableActionSyntax
+                                                      (Sql92DdlCommandAlterTableSyntax cmd))
                       , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
                    => ActionProvider cmd
 dropIndexProvider = ActionProvider provider
   where
     provider :: ActionProviderFn cmd
     provider findPreConditions _ =
-      do idxP@(TableHasIndex tblNm colNms) <- findPreConditions
+      do idxP@(TableHasIndex tblNm colNms _) <- findPreConditions
 
          let cmd = alterTableCmd (alterTableSyntax tblNm (dropIndexSyntax idxNm))
              idxNm = mkIndexName tblNm colNms
@@ -515,8 +523,6 @@ dropIndexProvider = ActionProvider provider
 --  * ALTER TABLE ... ADD COLUMN ...
 --  * ALTER TABLE ... DROP COLUMN ...
 --  * ALTER TABLE ... ALTER COLUMN ... SET [NOT] NULL
---  * ALTER TABLE ... ADD INDEX ...
---  * ALTER TABLE ... DROP INDEX ...
 defaultActionProvider :: ( Sql92SaneDdlCommandSyntaxMigrateOnly cmd
                          , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
                       => ActionProvider cmd
@@ -530,10 +536,24 @@ defaultActionProvider =
 
   , addColumnNullProvider
   , dropColumnNullProvider
+   ]
 
-    -- TODO: these two should apply to postgress only
-  , addIndexProvider
-  , dropIndexProvider ]
+-- | Action providers for indices management syntax.
+--
+-- In particular, this provides edges consisting of the following statements:
+--
+--  * ALTER TABLE ... ADD INDEX ...
+--  * ALTER TABLE ... DROP INDEX ...
+indexActionProvider :: ( Sql92SaneDdlCommandSyntaxMigrateOnly cmd
+                       , IsSql92AlterTableIndexSyntax (Sql92AlterTableAlterTableActionSyntax
+                                                       (Sql92DdlCommandAlterTableSyntax cmd))
+                         , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
+                      => ActionProvider cmd
+indexActionProvider =
+  mconcat
+  [ addIndexProvider
+  , dropIndexProvider
+   ]
 
 -- | Represents current state of a database graph search.
 --

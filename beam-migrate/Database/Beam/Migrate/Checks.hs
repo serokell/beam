@@ -130,22 +130,25 @@ data TableHasIndex
   = TableHasIndex
   { hasIndex_table :: Text   {-^ Table name -}
   , hasIndex_cols  :: [Text] {-^ Column names -}
+  , hasIndex_opts  :: IndexOptions
   } deriving (Show, Eq, Generic)
 instance Hashable TableHasIndex where
-    hashWithSalt salt (TableHasIndex tbl cols) = hashWithSalt salt (tbl, toList cols)
+    hashWithSalt salt (TableHasIndex tbl cols opts) = hashWithSalt salt (tbl, toList cols, opts)
 instance DatabasePredicate TableHasIndex where
-  englishDescription (TableHasIndex tblName colNames) =
-    "Table " <> show tblName <> " has index " <> show colNames
+  englishDescription (TableHasIndex tblName colNames opts) =
+    "Table " <> show tblName <> " has " <> indexOptionsEnglishDescription opts <>
+    "index " <> show colNames
 
   predicateSpecificity _ = PredicateSpecificityOnlyBackend ""
 
-  serializePredicate (TableHasIndex tbl cols) =
+  serializePredicate (TableHasIndex tbl cols opts) =
     object [ "has-index" .= object [ "table" .= tbl
-                                   , "columns" .= cols ] ]
+                                   , "columns" .= cols
+                                   , "options" .= opts ] ]
 
   -- we do not provide cascading delete of 'TableHasColumn' check,
   -- index should be removed explicitely first
-  predicateCascadesDropOn (TableHasIndex tblNm _) p'
+  predicateCascadesDropOn (TableHasIndex tblNm _ _) p'
     | Just (TableExistsPredicate tblNm') <- cast p' = tblNm' == tblNm
     | otherwise = False
 
@@ -164,8 +167,8 @@ entityIndicesToChecks (EntityIndices mkTableIndices) =
     flip map (toList mkTableIndices) $ \mkTableIndex ->
         TableCheck $ \tblNm tblSettings ->
           let dbEntity = DatabaseEntity (DatabaseTable tblNm tblSettings)
-              Index _ (TableIndex index) = mkTableIndex dbEntity
-          in SomeDatabasePredicate $ TableHasIndex tblNm (fromList $ toList index)
+              Index _ (TableIndex index opts) = mkTableIndex dbEntity
+          in SomeDatabasePredicate $ TableHasIndex tblNm (fromList $ toList index) opts
 
 -- * Deserialization
 
@@ -224,4 +227,4 @@ beamCheckDeserializers = mconcat
       v .: "has-index" >>=
       (withObject "TableHasIndex" $ \v' ->
        SomeDatabasePredicate <$>
-         (TableHasIndex <$> v' .: "table" <*> v' .: "columns"))
+         (TableHasIndex <$> v' .: "table" <*> v' .: "columns" <*> v' .: "options"))

@@ -4,12 +4,17 @@
 module Database.Beam.Schema.Indices
     ( TableIndex (..)
     , Index (..)
+    , IndexOptions (..)
+    , indexOptions
 
     , FieldIndexBuilder (..)
     , IndexBuilder (..)
     , EntityIndices (..)
     , DatabaseIndices
+    , (:->)
+    , IndexFromReference (..)
 
+    , indexOptionsEnglishDescription
     , mkIndexName
     , buildDbIndices
     , tableIndex
@@ -21,10 +26,12 @@ module Database.Beam.Schema.Indices
 
 import Control.Monad.Writer.Strict (runWriter, tell)
 
+import Data.Aeson
 import Data.DList (DList)
 import qualified Data.DList as DL
 import Data.Functor.Identity
-import Data.List.NonEmpty (NonEmpty (..), sort)
+import Data.Hashable (Hashable (..))
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Proxy
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -37,14 +44,34 @@ import Database.Beam.Schema.Tables
 
 -- TODO: format imports as they were everywhere!
 
--- | Single index settings for the given table.
-newtype TableIndex = TableIndex (NonEmpty Text)
-    deriving (Show, Semigroup)
+-- Some day it should have more options and allow to modify them depending on the backend.
+-- | Index modifiers.
+data IndexOptions = IndexOptions
+    { indexUnique :: Bool
+    } deriving (Show, Eq, Ord, Generic)
 
-instance Eq TableIndex where
-    TableIndex f1 == TableIndex f2 = sort f1 == sort f2
-instance Ord TableIndex where
-    TableIndex f1 `compare` TableIndex f2 = sort f1 `compare` sort f2
+instance Hashable IndexOptions
+
+instance ToJSON IndexOptions where
+    toJSON (IndexOptions unique) =
+        object [ "unique" .= unique ]
+instance FromJSON IndexOptions where
+    parseJSON = withObject "IndexOptions" $ \o ->
+                IndexOptions <$> o .: "unique"
+
+-- | Default options.
+indexOptions :: IndexOptions
+indexOptions = IndexOptions
+    { indexUnique = False
+    }
+
+indexOptionsEnglishDescription :: IndexOptions -> String
+indexOptionsEnglishDescription (IndexOptions uniq) =
+    (if uniq then "unique " else " ")
+
+-- | Single index settings for the given table.
+data TableIndex = TableIndex (NonEmpty Text) IndexOptions
+    deriving (Show, Eq, Ord)
 
 -- | Single index settings.
 data Index = Index !Text !TableIndex
@@ -59,11 +86,9 @@ mkIndexName tblNm fields =
 --
 --   Essentially a wrapper over a set of indices.
 --
---   TODO:
---   Usually you use the 'defaultDbSettings' function to generate an appropriate
---   naming convention for you, and then modify it with 'withDbModification' if
---   necessary. Under this scheme, the field can be renamed using the 'IsString'
---   instance for 'TableField', or the 'fieldNamed' function.
+--   Usually you use the 'dbIndices' function to generate an empty set of indices
+--   and modify its fields with 'mconcat' of several 'tableIndex'es, later wrapping
+--   it with 'addDefaultDbIndices'.
 newtype EntityIndices be db entity = EntityIndices
     { _entityIndices :: DList (DatabaseEntity be db entity -> Index)
       -- ^ Multiple indices info assuming the database settings is given.
@@ -91,10 +116,11 @@ buildDbIndices dbSettings dbIdxs =
                 dbSettings dbIdxs
     in indices
 
--- | Return empty 'DatabaseIndices' (not counting indices created automatically like
+-- | Return empty 'DatabaseIndices' (not counting indices created automatically, i.e.
 --   primary key index). You can use it like
 --
--- > dbIndices { tbl1 = tableIndex field1 <> tableIndex (field2, field3) }
+-- > dbIndices{ tbl1 = tableIndex field1 indexOptions{ uniqueIndex = True } <>
+--                     tableIndex (field2, field3) indexOptions }
 dbIndices :: forall be db. Database be db => DatabaseIndices be db
 dbIndices = runIdentity $ zipTables (Proxy @be) (\_ _ -> pure mempty) undefined undefined
 
@@ -120,28 +146,26 @@ type IsNotEmptyData item x = (Generic x, GIsNotEmptyData item (Rep x))
 
 -- | Gathers index fields from the given field of a table.
 class FieldIndexBuilder field where
-    buildFieldIndex :: field -> TableIndex
+    buildFieldIndex :: field -> NonEmpty Text
 
 instance FieldIndexBuilder (TableField table a) where
-    buildFieldIndex field = TableIndex . (:| []) $ _fieldName field
+    buildFieldIndex field = (:| []) $ _fieldName field
 
 instance (Beamable (PrimaryKey table),
           IsNotEmptyData "Primary key" (PrimaryKey table Identity)) =>
          FieldIndexBuilder (PrimaryKey table (TableField table')) where
     buildFieldIndex =
-        TableIndex . fromList .
-        allBeamValues (\(Columnar' (TableField fieldNm)) -> fieldNm)
+        fromList . allBeamValues (\(Columnar' (TableField fieldNm)) -> fieldNm)
 
 instance (Beamable (PrimaryKey table),
           IsNotEmptyData "Primary key" (PrimaryKey table Identity)) =>
          FieldIndexBuilder (PrimaryKey table (Nullable (TableField table'))) where
     buildFieldIndex =
-        TableIndex . fromList .
-        allBeamValues (\(Columnar' (TableField fieldNm)) -> fieldNm)
+        fromList . allBeamValues (\(Columnar' (TableField fieldNm)) -> fieldNm)
 
 -- | Gathers index fields from a user-supplied pack of table fields.
 class IndexBuilder table a where
-    buildIndex :: TableSettings table -> a -> TableIndex
+    buildIndex :: TableSettings table -> a -> NonEmpty Text
 
 -- | Field accessors are building blocks for indices.
 instance (f ~ TableField table, table ~ table', FieldIndexBuilder field) =>
@@ -168,11 +192,12 @@ instance (IndexBuilder table a, IndexBuilder table b, IndexBuilder table c) =>
 tableIndex
     :: IndexBuilder table a
     => a
+    -> IndexOptions
     -> EntityIndices be db (TableEntity table)
-tableIndex builder =
+tableIndex builder idxOpts =
     EntityIndices . DL.singleton $
         \(DatabaseEntity (DatabaseTable tblName tblSettings)) ->
-            Index tblName $ buildIndex tblSettings builder
+            Index tblName $ TableIndex (buildIndex tblSettings builder) idxOpts
 
 -- | For the given part of table @tblp@, indices derived from it.
 type TableIndicesBuilder tblp = DList (tblp -> TableIndex)
@@ -182,6 +207,42 @@ contramapTableIndicesBuilder :: (b -> a) -> TableIndicesBuilder a -> TableIndice
 contramapTableIndicesBuilder f = fmap (. f)
 
 -- * Automatic indices definition
+
+-- | Indicates a reference from table @tbl@ to table @tbl'@.
+data (tbl :: (* -> *) -> *) :-> (tbl' :: (* -> *) -> *)
+
+-- | Provide options for an automatically created index, which is caused by a primary key
+-- on table 'tbl\'' being embedded into table 'tbl'.
+class IndexFromReference tbl tbl' where
+    referenceIndexOptions :: Proxy (tbl :-> tbl') -> IndexOptions
+    referenceIndexOptions _ = indexOptions
+
+{- @martoon: I see several minor (or not) problems with making user define instances of
+   this typeclass:
+
+    1. Logic locality - instances can occur to be far away from user's database settings
+       declaration.
+    2. Garbade - user have to care itself about removing redundant instances which no more
+       in use.
+    3. Extensibility - each time we want to add a type-level restriction on a created index
+       (e.g. between these two tables only "hash" indices are allowed - nonsence, but we might
+       want something like this one day), then user's code will break on each such addition.
+
+    I'm thinking of an alternative approach when user has to supply a 'Rec' with 'HList's,
+    'Rec' would correspond to database and 'HList' to a table entity (this structure can
+    be generated with Generics), each element in 'HList' would be an 'IndexOption' tagged
+    with @tbl :-> tbl'@.
+    This would look like the following:
+
+    > defaultDbIndices (
+    >     (autoOption @(Table1 :-> Table1) indexOptions) :&
+    >     (autoOption @(Table2 :-> Table1) indexOptions .*.
+    >      autoOption @(Table2 :-> Table2) indexOptions { ... })
+    >   )
+
+    Although this all is pretty cumbersome and scaring for users, and dependencies on
+    'hList' and 'vinyl' are quite heavyweight.
+-}
 
 -- | Generic helper for 'AutoTableIndices'.
 class GAutoTableIndices (x :: * -> *) where
@@ -203,7 +264,7 @@ instance GAutoTableIndices (Rec0 x) where
     autoTableIndices' = mempty
 
 instance {-# OVERLAPPING #-}
-         Beamable (PrimaryKey tbl') =>
+         (Beamable (PrimaryKey tbl'), IndexFromReference tbl tbl') =>
          GAutoTableIndices (Rec0 (PrimaryKey tbl' (TableField tbl))) where
     autoTableIndices' =
         if tableValuesNeeded (Proxy @(PrimaryKey tbl')) == 0
@@ -212,11 +273,12 @@ instance {-# OVERLAPPING #-}
             let pkFields = allBeamValues
                               (\(Columnar' (TableField fieldNm)) -> fieldNm)
                               referringField
+                opts = referenceIndexOptions (Proxy @(tbl :-> tbl'))
                 -- unsafe call, but at this point we know the list is not empty
-            in TableIndex $ fromList pkFields
+            in TableIndex (fromList pkFields) opts
 
 instance {-# OVERLAPPING #-}
-         Beamable (PrimaryKey tbl') =>
+         (Beamable (PrimaryKey tbl'), IndexFromReference tbl tbl') =>
          GAutoTableIndices (Rec0 (PrimaryKey tbl' (Nullable (TableField tbl)))) where
     autoTableIndices' =
         if tableValuesNeeded (Proxy @(PrimaryKey tbl')) == 0
@@ -225,8 +287,9 @@ instance {-# OVERLAPPING #-}
             let pkFields = allBeamValues
                               (\(Columnar' (TableField fieldNm)) -> fieldNm)
                               referringField
+                opts = referenceIndexOptions (Proxy @(tbl :-> tbl'))
                 -- unsafe call, but at this point we know the list is not empty
-            in TableIndex $ fromList pkFields
+            in TableIndex (fromList pkFields) opts
 
 -- | Traverses fields of the given table and builds indices for all encountered 'PrimaryKey's.
 class AutoEntityIndex be db tbl where

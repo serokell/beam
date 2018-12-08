@@ -85,6 +85,7 @@ module Database.Beam.Postgres.Syntax
 import Database.Beam hiding (insert)
 import Database.Beam.Backend.SQL
 import Database.Beam.Query.SQL92
+import Database.Beam.Schema.Indices
 
 import Database.Beam.Migrate.Serialization
 import Database.Beam.Migrate.SQL
@@ -975,12 +976,15 @@ instance IsSql92AlterTableActionSyntax PgAlterTableActionSyntax where
     emit "RENAME COLUMN " <> pgQuotedIdentifier oldNm <> emit " TO " <> pgQuotedIdentifier newNm
 
 instance IsSql92AlterTableIndexSyntax PgAlterTableIndexSyntax where
-  addIndexSyntax idxNm colNms =
+  addIndexSyntax idxNm colNms (IndexOptions uniq) =
     PgAlterTableIndexSyntax $
-    emit "ADD INDEX " <> pgQuotedIdentifier idxNm <>
+    emit "ADD " <> emit uniqueS <>
+    emit "INDEX " <> pgQuotedIdentifier idxNm <>
         emit "(" <>
         mconcat (L.intersperse (emit ", ") (map pgQuotedIdentifier colNms)) <>
         emit ")"
+    where
+      uniqueS = if uniq then "UNIQUE " else " "
   dropIndexSyntax idxNm =
     -- TODO this is a wrong syntax actually
     PgAlterTableIndexSyntax $

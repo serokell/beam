@@ -404,6 +404,11 @@ instance Beamable DummyViewT
 
 instance Database be ColonistDb
 
+instance IndexFromReference ColonistT ColonistT
+instance IndexFromReference ColonistT PlanetT
+instance IndexFromReference PlanetT ColonistT where
+    referenceIndexOptions _ = indexOptions{ indexUnique = True }
+
 instance ReferencesTable ColonistT ColonistT where
     referenceOnDelete _ _ = Just SqlCascade
 instance ReferencesTable ColonistT PlanetT
@@ -432,30 +437,36 @@ indicesAreBuiltCorrectly =
 
          extraIndices = buildDbIndices colonistsDbSettings dbIndices
             { _colonists = mconcat
-                [ tableIndex _cOrigin
-                , tableIndex (_cFullName, _cFather)
+                [ tableIndex _cOrigin indexOptions
+                , tableIndex (_cFullName, _cFather) indexOptions
                 ]
             , _planets =
-                tableIndex _pSpaceId
+                tableIndex _pSpaceId indexOptions{ indexUnique = True }
             }
 
          autoIndices = buildDbIndices colonistsDbSettings defaultDbIndices
 
      extraIndices @?= [ Index colonistsTableName $
-                            TableIndex . fromList $ colonistsFieldNames ^.. (ix 3 <> ix 4)
+                            TableIndex (fromList $ colonistsFieldNames ^.. (ix 3 <> ix 4))
+                                       indexOptions
                       , Index colonistsTableName $
-                            TableIndex . fromList $ colonistsFieldNames ^.. (ix 1 <> ix 2)
+                            TableIndex (fromList $ colonistsFieldNames ^.. (ix 1 <> ix 2))
+                                       indexOptions
                       , Index planetsTableName $
-                            TableIndex . fromList $ planetsFieldNames ^.. ix 0
+                            TableIndex (fromList $ planetsFieldNames ^.. ix 0)
+                                       indexOptions{ indexUnique = True }
                        ]
 
      sort autoIndices @?= sort
           [ Index colonistsTableName $
-                TableIndex . fromList $ colonistsFieldNames ^.. ix 2
+                TableIndex (fromList $ colonistsFieldNames ^.. ix 2)
+                           indexOptions
           , Index colonistsTableName $
-                TableIndex . fromList $ colonistsFieldNames ^.. (ix 3 <> ix 4)
+                TableIndex (fromList $ colonistsFieldNames ^.. (ix 3 <> ix 4))
+                           indexOptions
           , Index planetsTableName $
-                TableIndex . fromList $ planetsFieldNames ^.. ix 3
+                TableIndex (fromList $ planetsFieldNames ^.. ix 3)
+                           indexOptions{ indexUnique = True }
             ]
 
 -- * Foreign keys are built correctly

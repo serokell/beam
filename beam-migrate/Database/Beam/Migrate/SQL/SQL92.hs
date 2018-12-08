@@ -9,6 +9,7 @@
 module Database.Beam.Migrate.SQL.SQL92 where
 
 import Database.Beam.Backend.SQL.SQL92
+import Database.Beam.Schema.Indices
 
 import Data.Aeson (Value)
 import Data.Hashable
@@ -37,7 +38,6 @@ type Sql92SaneDdlCommandSyntaxMigrateOnly cmd =
   , Sql92AlterTableColumnSchemaSyntax
       (Sql92AlterTableAlterTableActionSyntax (Sql92DdlCommandAlterTableSyntax cmd)) ~
       Sql92CreateTableColumnSchemaSyntax (Sql92DdlCommandCreateTableSyntax cmd)
-  , IsSql92AlterTableIndexSyntax (Sql92AlterTableAlterTableActionSyntax (Sql92DdlCommandAlterTableSyntax cmd))
   )
 
 type Sql92DdlCommandDataTypeSyntax syntax =
@@ -115,7 +115,7 @@ class IsSql92AlterColumnActionSyntax syntax where
   setNotNullSyntax, setNullSyntax :: syntax
 
 class IsSql92AlterTableIndexSyntax syntax where
-  addIndexSyntax :: Text -> [Text] -> syntax
+  addIndexSyntax :: Text -> [Text] -> IndexOptions -> syntax
   dropIndexSyntax :: Text -> syntax
 
 class ( IsSql92ColumnConstraintDefinitionSyntax (Sql92ColumnSchemaColumnConstraintDefinitionSyntax columnSchema)
