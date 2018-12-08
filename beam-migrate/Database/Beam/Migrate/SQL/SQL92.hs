@@ -28,6 +28,11 @@ type Sql92SaneDdlCommandSyntax cmd =
   , Sql92ColumnSchemaExpressionSyntax (Sql92DdlCommandColumnSchemaSyntax cmd) ~
       Sql92ExpressionSyntax cmd )
 
+-- | Syntax constraints required for indices manipulation in "ALTER TABLE" syntax.
+type Sql92AlterTableIndexCommandSyntax cmd =
+  IsSql92AlterTableIndexSyntax (Sql92AlterTableAlterTableActionSyntax
+                                (Sql92DdlCommandAlterTableSyntax cmd))
+
 -- | Syntax equalities for any reasonable DDL syntax, only including
 -- types defined here.
 type Sql92SaneDdlCommandSyntaxMigrateOnly cmd =

@@ -469,8 +469,7 @@ dropColumnNullProvider = ActionProvider provider
 -- | Action provider for SQL92 @ALTER TABLE ... ADD INDEX ...@ actions.
 addIndexProvider :: forall cmd
                    . ( Sql92SaneDdlCommandSyntaxMigrateOnly cmd
-                      , IsSql92AlterTableIndexSyntax (Sql92AlterTableAlterTableActionSyntax
-                                                      (Sql92DdlCommandAlterTableSyntax cmd))
+                     , Sql92AlterTableIndexCommandSyntax cmd
                      , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
                    => ActionProvider cmd
 addIndexProvider =
@@ -497,8 +496,7 @@ addIndexProvider =
 -- 'indexActionProvider' to your migration backend if your engine supports that.
 dropIndexProvider :: forall cmd
                     . ( Sql92SaneDdlCommandSyntaxMigrateOnly cmd
-                      , IsSql92AlterTableIndexSyntax (Sql92AlterTableAlterTableActionSyntax
-                                                      (Sql92DdlCommandAlterTableSyntax cmd))
+                      , Sql92AlterTableIndexCommandSyntax cmd
                       , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
                    => ActionProvider cmd
 dropIndexProvider = ActionProvider provider
@@ -545,9 +543,8 @@ defaultActionProvider =
 --  * ALTER TABLE ... ADD INDEX ...
 --  * ALTER TABLE ... DROP INDEX ...
 indexActionProvider :: ( Sql92SaneDdlCommandSyntaxMigrateOnly cmd
-                       , IsSql92AlterTableIndexSyntax (Sql92AlterTableAlterTableActionSyntax
-                                                       (Sql92DdlCommandAlterTableSyntax cmd))
-                         , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
+                       , Sql92AlterTableIndexCommandSyntax cmd
+                       , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
                       => ActionProvider cmd
 indexActionProvider =
   mconcat

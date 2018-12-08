@@ -18,6 +18,7 @@ module Database.Beam.Migrate.SQL.Tables
 
   , renameTableTo, renameColumnTo
   , addColumn, dropColumn
+  , addIndex, dropIndex
 
     -- * Field specification
   , DefaultValue, Constraint(..)
@@ -41,6 +42,7 @@ module Database.Beam.Migrate.SQL.Tables
 
 import Database.Beam
 import Database.Beam.Backend.SQL
+import Database.Beam.Schema.Indices
 import Database.Beam.Schema.Tables
 
 import Database.Beam.Migrate.Checks
@@ -210,6 +212,28 @@ alterTable (CheckedDatabaseEntity (CheckedDatabaseTable (DatabaseTable tblNm tbl
                           newTbl
  in forM_ cmds (\cmd -> upDown (alterTableCmd cmd) Nothing) >>
     pure (CheckedDatabaseEntity (CheckedDatabaseTable (DatabaseTable tblNm' tbl') (givenTableChecks tblChecks') fieldChecks') entityChecks)
+
+-- | @ALTER TABLE ... ADD INDEX ...@ command
+addIndex :: (Sql92SaneDdlCommandSyntax syntax,
+             Sql92AlterTableIndexCommandSyntax syntax)
+         => [ColumnMigration a] -> IndexOptions -> TableMigration syntax ()
+addIndex columns opts = TableMigration $ do
+  (curTblNm, _)<- get
+  let columnNms = map columnMigrationFieldName columns
+      idxName = mkIndexName curTblNm columnNms
+  tell [ alterTableSyntax curTblNm (addIndexSyntax idxName columnNms opts) ]
+  -- TODO: should I add index checks here?
+
+-- | @ALTER TABLE ... DROP INDEX ...@ command
+dropIndex :: (Sql92SaneDdlCommandSyntax syntax,
+             Sql92AlterTableIndexCommandSyntax syntax)
+         => [ColumnMigration a] -> TableMigration syntax ()
+dropIndex columns = TableMigration $ do
+  (curTblNm, _)<- get
+  let columnNms = map columnMigrationFieldName columns
+      idxName = mkIndexName curTblNm columnNms
+  tell [ alterTableSyntax curTblNm (dropIndexSyntax idxName) ]
+  -- TODO: should I remove index checks here?
 
 -- * Fields
 
