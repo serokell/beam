@@ -25,7 +25,6 @@ import Data.DList (DList)
 import qualified Data.DList as DL
 import Data.Functor.Identity
 import Data.List.NonEmpty (NonEmpty (..), sort)
-import Data.Monoid (Endo (..))
 import Data.Proxy
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -34,7 +33,6 @@ import GHC.Exts (Constraint, fromList)
 import GHC.Generics hiding (C, R)
 import GHC.TypeLits
 
-import Database.Beam.Schema.Lookup
 import Database.Beam.Schema.Tables
 
 -- TODO: format imports as they were everywhere!
@@ -176,73 +174,94 @@ tableIndex builder =
         \(DatabaseEntity (DatabaseTable tblName tblSettings)) ->
             Index tblName $ buildIndex tblSettings builder
 
+-- | For the given part of table @tblp@, indices derived from it.
+type TableIndicesBuilder tblp = DList (tblp -> TableIndex)
+
+-- | Helper for GAutoTableIndices
+contramapTableIndicesBuilder :: (b -> a) -> TableIndicesBuilder a -> TableIndicesBuilder b
+contramapTableIndicesBuilder f = fmap (. f)
 
 -- * Automatic indices definition
 
 -- | Generic helper for 'AutoTableIndices'.
---   Since 'DatabaseIndices' accepts exact names in deferred way, knowing just a structure
---   of the database is enough. The same applies to all the next typeclasses.
-class GAutoTableIndices be db (x :: * -> *) where
-    autoTableIndices' :: Proxy x -> Endo (DatabaseIndices be db)
+class GAutoTableIndices (x :: * -> *) where
+    -- | Returns list of deferred indices.
+    --   Exactly this type is required, later in migrations knowing that list size does
+    --   not depend on names (only on structure of the database) is important.
+    autoTableIndices' :: DList (x p -> TableIndex)
 
-instance GAutoTableIndices be db x => GAutoTableIndices be db (M1 i f x) where
-    autoTableIndices' _ = autoTableIndices' (Proxy @x)
+instance GAutoTableIndices x => GAutoTableIndices (M1 i f x) where
+    autoTableIndices' = contramapTableIndicesBuilder unM1 $ autoTableIndices' @x
 
-instance (GAutoTableIndices be db x, GAutoTableIndices be db y, Database be db) =>
-          GAutoTableIndices be db (x :*: y) where
-    autoTableIndices' _ = autoTableIndices' (Proxy @x) <> autoTableIndices' (Proxy @y)
+instance (GAutoTableIndices x, GAutoTableIndices y) =>
+          GAutoTableIndices (x :*: y) where
+    autoTableIndices' =
+        contramapTableIndicesBuilder (\(x :*: _) -> x) (autoTableIndices' @x) <>
+        contramapTableIndicesBuilder (\(_ :*: y) -> y) (autoTableIndices' @y)
 
-instance Database be db => GAutoTableIndices be db (Rec0 x) where
-    autoTableIndices' _ = mempty
+instance GAutoTableIndices (Rec0 x) where
+    autoTableIndices' = mempty
 
 instance {-# OVERLAPPING #-}
-         (Database be db, Table tbl, Beamable (PrimaryKey tbl),
-          GetDbEntity TableEntity EntityIndices tbl be db) =>
-         GAutoTableIndices be db (Rec0 (PrimaryKey tbl f)) where
-    autoTableIndices' _ =
-        if tableValuesNeeded (Proxy @(PrimaryKey tbl)) == 0
-        then mempty
-        else Endo $ \prevRes -> overDbEntity (Proxy @TableEntity) (Proxy @tbl) prevRes $
-                EntityIndices . DL.singleton $
-                    \(DatabaseEntity (DatabaseTable tblName tblSettings)) ->
-                        let pkFields = allBeamValues
-                                          (\(Columnar' (TableField fieldNm)) -> fieldNm)
-                                          (primaryKey tblSettings)
-                            -- unsafe call, but at this point we know the list is not empty
-                            tblIndex = TableIndex $ fromList pkFields
-                        in Index tblName tblIndex
+         Beamable (PrimaryKey tbl') =>
+         GAutoTableIndices (Rec0 (PrimaryKey tbl' (TableField tbl))) where
+    autoTableIndices' =
+        if tableValuesNeeded (Proxy @(PrimaryKey tbl')) == 0
+        then DL.empty
+        else DL.singleton $ \(K1 referringField) ->
+            let pkFields = allBeamValues
+                              (\(Columnar' (TableField fieldNm)) -> fieldNm)
+                              referringField
+                -- unsafe call, but at this point we know the list is not empty
+            in TableIndex $ fromList pkFields
+
+instance {-# OVERLAPPING #-}
+         Beamable (PrimaryKey tbl') =>
+         GAutoTableIndices (Rec0 (PrimaryKey tbl' (Nullable (TableField tbl)))) where
+    autoTableIndices' =
+        if tableValuesNeeded (Proxy @(PrimaryKey tbl')) == 0
+        then DL.empty
+        else DL.singleton $ \(K1 referringField) ->
+            let pkFields = allBeamValues
+                              (\(Columnar' (TableField fieldNm)) -> fieldNm)
+                              referringField
+                -- unsafe call, but at this point we know the list is not empty
+            in TableIndex $ fromList pkFields
 
 -- | Traverses fields of the given table and builds indices for all encountered 'PrimaryKey's.
 class AutoEntityIndex be db tbl where
-    autoEntityIndex :: Proxy tbl -> Endo (DatabaseIndices be db)
+    autoEntityIndex :: Proxy tbl -> EntityIndices be db tbl
 
 -- Other types of entities are approaching, and we probably don't want to define
 -- instances for all of them.
--- | Traverses the given part of table and for every field which is some 'PrimaryKey'
--- makes corresponding SQL index in the referred table.
--- If a foreign key cannot be resolved within the given database, compile error arises.
+-- | Traverses the given table and for every field which is some 'PrimaryKey'
+-- makes corresponding SQL index, this allows "JOIN"s on this table perform nicely.
 instance {-# OVERLAPPABLE #-}
          AutoEntityIndex be db entity where
     autoEntityIndex _ = mempty
 
-instance (GAutoTableIndices be db (Rep (tbl Exposed))) =>
+instance (Generic (TableSettings tbl),
+          GAutoTableIndices (Rep (TableSettings tbl))) =>
          AutoEntityIndex be db (TableEntity tbl) where
-    autoEntityIndex _ = autoTableIndices' (Proxy @(Rep (tbl Exposed)))
+    autoEntityIndex _ =
+        EntityIndices $ flip fmap autoTableIndices' $
+            \mkIndex (DatabaseEntity (DatabaseTable tblName tblSettings)) ->
+                Index tblName (mkIndex (from tblSettings))
 
 -- | Traverses all tables in database and builds indices for all encountered 'PrimaryKey's.
-class GAutoDbIndices be db (x :: * -> *) where
-    autoDbIndices' :: Proxy x -> Endo (DatabaseIndices be db)
+class GAutoDbIndices (x :: * -> *) where
+    autoDbIndices' :: x p
 
-instance GAutoDbIndices be db x => GAutoDbIndices be db (M1 i f x) where
-    autoDbIndices' _ = autoDbIndices' (Proxy @x)
+instance GAutoDbIndices x => GAutoDbIndices (M1 i f x) where
+    autoDbIndices' = M1 autoDbIndices'
 
-instance (GAutoDbIndices be db x, GAutoDbIndices be db y) =>
-         GAutoDbIndices be db (x :*: y) where
-    autoDbIndices' _ = autoDbIndices' (Proxy @x) <> autoDbIndices' (Proxy @y)
+instance (GAutoDbIndices x, GAutoDbIndices y) =>
+         GAutoDbIndices (x :*: y) where
+    autoDbIndices' = autoDbIndices' :*: autoDbIndices'
 
 instance AutoEntityIndex be db tbl =>
-         GAutoDbIndices be db (Rec0 (EntityIndices be db tbl)) where
-    autoDbIndices' _ = autoEntityIndex @be @db (Proxy @tbl)
+         GAutoDbIndices (Rec0 (EntityIndices be db tbl)) where
+    autoDbIndices' = K1 $ autoEntityIndex @be @db (Proxy @tbl)
 
 -- | Automatically creates indices for every 'PrimaryKey' embedded into a table, for
 -- "JOIN"s sake.
@@ -251,9 +270,9 @@ instance AutoEntityIndex be db tbl =>
 defaultDbIndices
     :: forall be db.
        (Database be db,
-        Generic (DatabaseIndices be db), GAutoDbIndices be db (Rep (DatabaseIndices be db)))
+        Generic (DatabaseIndices be db), GAutoDbIndices (Rep (DatabaseIndices be db)))
     => DatabaseIndices be db
-defaultDbIndices = appEndo (autoDbIndices' (Proxy @(Rep (DatabaseIndices be db)))) dbIndices
+defaultDbIndices = to autoDbIndices'
 
 -- | Attaches default indices to the given ones. Usually more convenient than plain
 --   'defaultDbIndices':
@@ -261,6 +280,6 @@ defaultDbIndices = appEndo (autoDbIndices' (Proxy @(Rep (DatabaseIndices be db))
 -- > ... `withDbIndices` addDefaultDbIndices dbIndices{ table1 = ..., ... }
 addDefaultDbIndices
     :: (Database be db,
-        Generic (DatabaseIndices be db), GAutoDbIndices be db (Rep (DatabaseIndices be db)))
+        Generic (DatabaseIndices be db), GAutoDbIndices (Rep (DatabaseIndices be db)))
     => DatabaseIndices be db -> DatabaseIndices be db
 addDefaultDbIndices = mergeDbIndices defaultDbIndices

@@ -451,9 +451,11 @@ indicesAreBuiltCorrectly =
 
      sort autoIndices @?= sort
           [ Index colonistsTableName $
-                TableIndex . fromList $ colonistsFieldNames ^.. ix 0
+                TableIndex . fromList $ colonistsFieldNames ^.. ix 2
+          , Index colonistsTableName $
+                TableIndex . fromList $ colonistsFieldNames ^.. (ix 3 <> ix 4)
           , Index planetsTableName $
-                TableIndex . fromList $ planetsFieldNames ^.. (ix 0 <> ix 1)
+                TableIndex . fromList $ planetsFieldNames ^.. ix 3
             ]
 
 -- * Foreign keys are built correctly
