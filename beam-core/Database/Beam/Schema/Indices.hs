@@ -328,8 +328,6 @@ instance AutoEntityIndex be db tbl =>
 
 -- | Automatically creates indices for every 'PrimaryKey' embedded into a table, for
 -- "JOIN"s sake.
--- Resulting indices appear exactly in the order in which 'PrimaryKey's are encountered in
--- the database. Indices may repeat (TODO: note that it is okay, or not? Move "if not exists" to settings?).
 defaultDbIndices
     :: forall be db.
        (Database be db,

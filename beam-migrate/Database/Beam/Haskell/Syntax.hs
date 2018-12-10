@@ -453,9 +453,9 @@ instance IsSql92AlterTableActionSyntax HsNone where
   renameTableToSyntax _ = HsNone
   renameColumnToSyntax _ _ = HsNone
 
-instance IsSql92AlterTableIndexSyntax HsNone where
-  addIndexSyntax _ _ _ = HsNone
-  dropIndexSyntax _ = HsNone
+instance IsSql92IndexSyntax HsNone where
+  addIndexSyntax _ _ _ _ = HsNone
+  dropIndexSyntax _ _ = HsNone
 
 instance IsSql92AlterColumnActionSyntax HsNone where
   setNullSyntax = HsNone

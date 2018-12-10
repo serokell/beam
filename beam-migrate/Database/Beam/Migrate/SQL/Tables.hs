@@ -215,24 +215,24 @@ alterTable (CheckedDatabaseEntity (CheckedDatabaseTable (DatabaseTable tblNm tbl
 
 -- | @ALTER TABLE ... ADD INDEX ...@ command
 addIndex :: (Sql92SaneDdlCommandSyntax syntax,
-             Sql92AlterTableIndexCommandSyntax syntax)
+             Sql92IndexCommandSyntax syntax)
          => [ColumnMigration a] -> IndexOptions -> TableMigration syntax ()
 addIndex columns opts = TableMigration $ do
   (curTblNm, _)<- get
   let columnNms = map columnMigrationFieldName columns
       idxName = mkIndexName curTblNm columnNms
-  tell [ alterTableSyntax curTblNm (addIndexSyntax idxName columnNms opts) ]
+  tell [ addIndexSyntax curTblNm idxName columnNms opts ]
   -- TODO: should I add index checks here?
 
 -- | @ALTER TABLE ... DROP INDEX ...@ command
 dropIndex :: (Sql92SaneDdlCommandSyntax syntax,
-             Sql92AlterTableIndexCommandSyntax syntax)
+             Sql92IndexCommandSyntax syntax)
          => [ColumnMigration a] -> TableMigration syntax ()
 dropIndex columns = TableMigration $ do
   (curTblNm, _)<- get
   let columnNms = map columnMigrationFieldName columns
       idxName = mkIndexName curTblNm columnNms
-  tell [ alterTableSyntax curTblNm (dropIndexSyntax idxName) ]
+  tell [ dropIndexSyntax curTblNm idxName ]
   -- TODO: should I remove index checks here?
 
 -- * Fields

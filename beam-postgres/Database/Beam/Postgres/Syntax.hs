@@ -378,7 +378,7 @@ newtype PgDropTableSyntax = PgDropTableSyntax { fromPgDropTable :: PgSyntax }
 newtype PgAlterTableSyntax = PgAlterTableSyntax { fromPgAlterTable :: PgSyntax }
 newtype PgAlterTableActionSyntax = PgAlterTableActionSyntax { fromPgAlterTableAction :: PgSyntax }
 newtype PgAlterColumnActionSyntax = PgAlterColumnActionSyntax { fromPgAlterColumnAction :: PgSyntax }
-newtype PgAlterTableIndexSyntax = PgAlterTableIndexSyntax { fromPgAlterTableIndex :: PgSyntax }
+newtype PgIndexSyntax = PgIndexSyntax { fromPgIndex :: PgSyntax }
 newtype PgWindowFrameSyntax = PgWindowFrameSyntax { fromPgWindowFrame :: PgSyntax }
 newtype PgWindowFrameBoundsSyntax = PgWindowFrameBoundsSyntax { fromPgWindowFrameBounds :: PgSyntax }
 newtype PgWindowFrameBoundSyntax = PgWindowFrameBoundSyntax { fromPgWindowFrameBound :: ByteString -> PgSyntax }
@@ -975,19 +975,17 @@ instance IsSql92AlterTableActionSyntax PgAlterTableActionSyntax where
     PgAlterTableActionSyntax $
     emit "RENAME COLUMN " <> pgQuotedIdentifier oldNm <> emit " TO " <> pgQuotedIdentifier newNm
 
-instance IsSql92AlterTableIndexSyntax PgAlterTableIndexSyntax where
-  addIndexSyntax idxNm colNms (IndexOptions uniq) =
-    PgAlterTableIndexSyntax $
-    emit "ADD " <> emit uniqueS <>
+instance IsSql92IndexSyntax PgIndexSyntax where
+  addIndexSyntax tblNm idxNm colNms (IndexOptions uniq) =
+    PgIndexSyntax $
+    emit "CREATE " <> emit (if uniq then "UNIQUE " else " ") <>
     emit "INDEX " <> pgQuotedIdentifier idxNm <>
+    emit " ON " <> pgQuotedIdentifier tblNm <>
         emit "(" <>
         mconcat (L.intersperse (emit ", ") (map pgQuotedIdentifier colNms)) <>
         emit ")"
-    where
-      uniqueS = if uniq then "UNIQUE " else " "
-  dropIndexSyntax idxNm =
-    -- TODO this is a wrong syntax actually
-    PgAlterTableIndexSyntax $
+  dropIndexSyntax _tblNm idxNm =
+    PgIndexSyntax $
     emit "DROP INDEX " <> pgQuotedIdentifier idxNm
 
 instance IsSql92AlterColumnActionSyntax PgAlterColumnActionSyntax where

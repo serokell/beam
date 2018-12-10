@@ -28,10 +28,9 @@ type Sql92SaneDdlCommandSyntax cmd =
   , Sql92ColumnSchemaExpressionSyntax (Sql92DdlCommandColumnSchemaSyntax cmd) ~
       Sql92ExpressionSyntax cmd )
 
--- | Syntax constraints required for indices manipulation in "ALTER TABLE" syntax.
-type Sql92AlterTableIndexCommandSyntax cmd =
-  IsSql92AlterTableIndexSyntax (Sql92AlterTableAlterTableActionSyntax
-                                (Sql92DdlCommandAlterTableSyntax cmd))
+-- | Syntax constraints required for indices manipulation.
+type Sql92IndexCommandSyntax cmd =
+  IsSql92IndexSyntax (Sql92DdlCommandAlterTableSyntax cmd)
 
 -- | Syntax equalities for any reasonable DDL syntax, only including
 -- types defined here.
@@ -119,9 +118,9 @@ class ( IsSql92ColumnSchemaSyntax (Sql92AlterTableColumnSchemaSyntax syntax)
 class IsSql92AlterColumnActionSyntax syntax where
   setNotNullSyntax, setNullSyntax :: syntax
 
-class IsSql92AlterTableIndexSyntax syntax where
-  addIndexSyntax :: Text -> [Text] -> IndexOptions -> syntax
-  dropIndexSyntax :: Text -> syntax
+class IsSql92IndexSyntax syntax where
+  addIndexSyntax :: Text -> Text -> [Text] -> IndexOptions -> syntax
+  dropIndexSyntax :: Text -> Text -> syntax
 
 class ( IsSql92ColumnConstraintDefinitionSyntax (Sql92ColumnSchemaColumnConstraintDefinitionSyntax columnSchema)
       , IsSql92DataTypeSyntax (Sql92ColumnSchemaColumnTypeSyntax columnSchema)

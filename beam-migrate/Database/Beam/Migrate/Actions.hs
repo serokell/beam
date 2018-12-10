@@ -469,7 +469,7 @@ dropColumnNullProvider = ActionProvider provider
 -- | Action provider for SQL92 @ALTER TABLE ... ADD INDEX ...@ actions.
 addIndexProvider :: forall cmd
                    . ( Sql92SaneDdlCommandSyntaxMigrateOnly cmd
-                     , Sql92AlterTableIndexCommandSyntax cmd
+                     , Sql92IndexCommandSyntax cmd
                      , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
                    => ActionProvider cmd
 addIndexProvider =
@@ -484,7 +484,7 @@ addIndexProvider =
            TableHasIndex tblNm'' colNms' _ :: TableHasIndex <- findPreConditions
            guard (tblNm'' == tblNm && colNms == colNms') -- An index on these columns already exists
 
-         let cmd = alterTableCmd (alterTableSyntax tblNm (addIndexSyntax idxNm colNms opts))
+         let cmd = alterTableCmd (addIndexSyntax tblNm idxNm colNms opts)
              idxNm = mkIndexName tblNm colNms
          pure (PotentialAction mempty (HS.fromList [SomeDatabasePredicate idxP])
                                (Seq.singleton (MigrationCommand cmd MigrationKeepsData))
@@ -496,7 +496,7 @@ addIndexProvider =
 -- 'indexActionProvider' to your migration backend if your engine supports that.
 dropIndexProvider :: forall cmd
                     . ( Sql92SaneDdlCommandSyntaxMigrateOnly cmd
-                      , Sql92AlterTableIndexCommandSyntax cmd
+                      , Sql92IndexCommandSyntax cmd
                       , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
                    => ActionProvider cmd
 dropIndexProvider = ActionProvider provider
@@ -505,7 +505,7 @@ dropIndexProvider = ActionProvider provider
     provider findPreConditions _ =
       do idxP@(TableHasIndex tblNm colNms _) <- findPreConditions
 
-         let cmd = alterTableCmd (alterTableSyntax tblNm (dropIndexSyntax idxNm))
+         let cmd = alterTableCmd (dropIndexSyntax tblNm idxNm)
              idxNm = mkIndexName tblNm colNms
          pure (PotentialAction (HS.fromList [SomeDatabasePredicate idxP]) mempty
                                (Seq.singleton (MigrationCommand cmd MigrationKeepsData))
@@ -543,7 +543,7 @@ defaultActionProvider =
 --  * ALTER TABLE ... ADD INDEX ...
 --  * ALTER TABLE ... DROP INDEX ...
 indexActionProvider :: ( Sql92SaneDdlCommandSyntaxMigrateOnly cmd
-                       , Sql92AlterTableIndexCommandSyntax cmd
+                       , Sql92IndexCommandSyntax cmd
                        , Sql92SerializableDataTypeSyntax (Sql92DdlCommandDataTypeSyntax cmd) )
                       => ActionProvider cmd
 indexActionProvider =
