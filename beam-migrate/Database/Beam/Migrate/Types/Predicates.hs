@@ -80,12 +80,12 @@ data PredicateSpecificity
 instance Hashable PredicateSpecificity
 
 instance ToJSON PredicateSpecificity where
-  toJSON PredicateSpecificityAllBackends     = "all"
+  toJSON PredicateSpecificityAllBackends = "all"
   toJSON (PredicateSpecificityOnlyBackend s) = object [ "backend" .= toJSON s ]
 instance FromJSON PredicateSpecificity where
-  parseJSON "all"      = pure PredicateSpecificityAllBackends
+  parseJSON "all" = pure PredicateSpecificityAllBackends
   parseJSON (Object o) = PredicateSpecificityOnlyBackend <$> o .: "backend"
-  parseJSON _          = fail "PredicateSource"
+  parseJSON _ = fail "PredicateSource"
 
 -- | Convenience synonym for 'SomeDatabasePredicate'
 p :: DatabasePredicate p => p -> SomeDatabasePredicate

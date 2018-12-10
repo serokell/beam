@@ -1,5 +1,5 @@
-{-# LANGUAGE DeriveAnyClass       #-}
-{-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Database.Beam.Test.Schema
@@ -14,26 +14,26 @@ module Database.Beam.Test.Schema
 
   , tests ) where
 
-import Database.Beam
-import Database.Beam.Backend
-import Database.Beam.Backend.SQL.AST
-import Database.Beam.Schema.ForeignKeys
-import Database.Beam.Schema.Indices
-import Database.Beam.Schema.Tables
+import           Database.Beam
+import           Database.Beam.Backend
+import           Database.Beam.Backend.SQL.AST
+import           Database.Beam.Schema.ForeignKeys
+import           Database.Beam.Schema.Indices
+import           Database.Beam.Schema.Tables
 
-import Data.List (sort)
-import Data.Monoid
-import Data.Proxy
-import Data.Text (Text)
+import           Data.List (sort)
+import           Data.Monoid
+import           Data.Proxy
+import           Data.Text (Text)
 import qualified Data.Text as T
-import Data.Time.Clock (UTCTime)
+import           Data.Time.Clock (UTCTime)
 
-import GHC.Exts (fromList)
+import           GHC.Exts (fromList)
 
-import Lens.Micro
+import           Lens.Micro
 
-import Test.Tasty
-import Test.Tasty.HUnit
+import           Test.Tasty
+import           Test.Tasty.HUnit
 
 tests :: TestTree
 tests = testGroup "Schema Tests"
@@ -58,17 +58,17 @@ instance BeamBackend DummyBackend where
 
 data EmployeeT f
   = EmployeeT
-  { _employeeFirstName   :: Columnar f Text
-  , _employeeLastName    :: Columnar f Text
+  { _employeeFirstName :: Columnar f Text
+  , _employeeLastName  :: Columnar f Text
   , _employeePhoneNumber :: Columnar f Text
 
-  , _employeeAge         :: Columnar f Int
-  , _employeeSalary      :: Columnar f Double
+  , _employeeAge       :: Columnar f Int
+  , _employeeSalary    :: Columnar f Double
 
-  , _employeeHireDate    :: Columnar f UTCTime
-  , _employeeLeaveDate   :: Columnar f (Maybe UTCTime)
+  , _employeeHireDate  :: Columnar f UTCTime
+  , _employeeLeaveDate :: Columnar f (Maybe UTCTime)
 
-  , _employeeCreated     :: Columnar f UTCTime
+  , _employeeCreated :: Columnar f UTCTime
   } deriving Generic
 instance Beamable EmployeeT
 instance Table EmployeeT where
@@ -115,8 +115,8 @@ basicSchemaGeneration =
 data RoleT f
   = RoleT
   { _roleForEmployee :: PrimaryKey EmployeeT f
-  , _roleName        :: Columnar f Text
-  , _roleStarted     :: Columnar f UTCTime }
+  , _roleName :: Columnar f Text
+  , _roleStarted :: Columnar f UTCTime }
   deriving Generic
 instance Beamable RoleT
 instance Table RoleT where
@@ -160,12 +160,12 @@ departmentTableSchema = defTblFieldSettings
 
 data FunnyT f
   = FunnyT
-  { funny_field1       :: Columnar f Text
-  , funny_field_2      :: Columnar f Text
-  , funny_first_name   :: Columnar f Text
-  , _funny_lastName    :: Columnar f Text
+  { funny_field1 :: Columnar f Text
+  , funny_field_2 :: Columnar f Text
+  , funny_first_name :: Columnar f Text
+  , _funny_lastName :: Columnar f Text
   , _funny_middle_Name :: Columnar f Text
-  , ___                :: Columnar f Int }
+  , ___ :: Columnar f Int }
   deriving Generic
 instance Beamable FunnyT
 instance Table FunnyT where
@@ -237,16 +237,16 @@ parametricAndFixedNestedBeamsAreEquivalent =
 type ADepartmentVehicule   = ADepartmentVehiculeT Identity
 type ADepartmentVehiculeT  = DepartamentRelatedT VehiculeInformationT VehiculeT
 data DepartamentRelatedT metaInfo prop f = DepartamentProperty
-      { _aDepartament :: PrimaryKey DepartmentT f
-      , _aRelatesTo   :: prop f                -- checking we can nest both, nullable and non-nullable beams.
-      , _aMetaInfo    :: metaInfo (Nullable f)
+      { _aDepartament  :: PrimaryKey DepartmentT f
+      , _aRelatesTo    :: prop f                -- checking we can nest both, nullable and non-nullable beams.
+      , _aMetaInfo     :: metaInfo (Nullable f)
       } deriving Generic
 
 type BDepartmentVehicule    = BDepartmentVehiculeT Identity
 data BDepartmentVehiculeT f = BDepartmentVehicule
-      { _bDepartament :: PrimaryKey DepartmentT f
-      , _bRelatesTo   :: VehiculeT f
-      , _bMetaInfo    :: VehiculeInformationT (Nullable f)
+      { _bDepartament  :: PrimaryKey DepartmentT f
+      , _bRelatesTo    :: VehiculeT f
+      , _bMetaInfo     :: VehiculeInformationT (Nullable f)
       } deriving Generic
 --
 -- ["departament__name","relates_to__id","relates_to__type","relates_to__of_wheels","meta_info__price"]
@@ -325,7 +325,7 @@ employeeDbSettingsRuleMods :: DatabaseSettings be EmployeeDb
 employeeDbSettingsRuleMods = defaultDbSettings `withDbModification`
                              renamingFields (\field ->
                                                 case T.stripPrefix "funny" field of
-                                                  Nothing      -> field
+                                                  Nothing -> field
                                                   Just fieldNm -> "pfx_" <> field)
 
 -- employeeDbSettingsModified :: DatabaseSettings EmployeeDb

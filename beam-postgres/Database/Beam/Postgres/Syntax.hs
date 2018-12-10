@@ -1,16 +1,16 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds -fno-warn-name-shadowing #-}
-{-# LANGUAGE CPP                        #-}
-{-# LANGUAGE DeriveFunctor              #-}
-{-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE PolyKinds                  #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- | Data types for Postgres syntax. Access is given mainly for extension
 -- modules. The types and definitions here are likely to change.
@@ -82,55 +82,61 @@ module Database.Beam.Postgres.Syntax
 
     , PostgresInaccessible ) where
 
-import Database.Beam hiding (insert)
-import Database.Beam.Backend.SQL
-import Database.Beam.Query.SQL92
-import Database.Beam.Schema.Indices
+import           Database.Beam hiding (insert)
+import           Database.Beam.Backend.SQL
+import           Database.Beam.Query.SQL92
+import           Database.Beam.Schema.Indices
 
-import Database.Beam.Migrate.Serialization
-import Database.Beam.Migrate.SQL
-import Database.Beam.Migrate.SQL.Builder hiding (fromSqlConstraintAttributes)
+import           Database.Beam.Migrate.Serialization
+import           Database.Beam.Migrate.SQL
+import           Database.Beam.Migrate.SQL.Builder hiding
+                                                    (fromSqlConstraintAttributes)
 
-import Database.Beam.Migrate.Generics
+import           Database.Beam.Migrate.Generics
 
-import Control.Monad.Free
-import Control.Monad.Free.Church
+import           Control.Monad.Free
+import           Control.Monad.Free.Church
 
-import Data.Aeson (Value, object, (.=))
-import Data.Bits
-import Data.ByteString (ByteString)
-import Data.ByteString.Builder (Builder, byteString, char8, toLazyByteString)
+import           Data.Aeson (Value, object, (.=))
+import           Data.Bits
+import           Data.ByteString (ByteString)
+import           Data.ByteString.Builder (Builder, byteString, char8,
+                                          toLazyByteString)
 import qualified Data.ByteString.Char8 as B
-import Data.ByteString.Lazy.Char8 (toStrict)
+import           Data.ByteString.Lazy.Char8 (toStrict)
 import qualified Data.ByteString.Lazy.Char8 as BL
-import Data.CaseInsensitive (CI)
+import           Data.CaseInsensitive (CI)
 import qualified Data.CaseInsensitive as CI
-import Data.Coerce
-import Data.Functor.Classes
-import Data.Hashable
-import Data.Int
+import           Data.Coerce
+import           Data.Functor.Classes
+import           Data.Hashable
+import           Data.Int
 import qualified Data.List as L
-import Data.Maybe
-import Data.Scientific (Scientific)
-import Data.String (IsString (..), fromString)
-import Data.Tagged
+import           Data.Maybe
+import           Data.Scientific (Scientific)
+import           Data.String (IsString (..), fromString)
+import           Data.Tagged
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.Lazy as TL
-import Data.Time (Day, LocalTime, NominalDiffTime, TimeOfDay, UTCTime, ZonedTime)
-import Data.UUID.Types (UUID)
+import           Data.Time (Day, LocalTime, NominalDiffTime, TimeOfDay, UTCTime,
+                            ZonedTime)
+import           Data.UUID.Types (UUID)
 import qualified Data.Vector as V
-import Data.Word
+import           Data.Word
 #if !MIN_VERSION_base(4, 11, 0)
-import Data.Semigroup
+import           Data.Semigroup
 #endif
 
-import qualified Database.PostgreSQL.Simple.HStore as Pg (HStoreBuilder, HStoreList, HStoreMap)
-import qualified Database.PostgreSQL.Simple.Time as Pg (Date, LocalTimestamp, UTCTimestamp,
+import qualified Database.PostgreSQL.Simple.HStore as Pg (HStoreBuilder,
+                                                          HStoreList, HStoreMap)
+import qualified Database.PostgreSQL.Simple.Time as Pg (Date, LocalTimestamp,
+                                                        UTCTimestamp,
                                                         ZonedTimestamp)
 import qualified Database.PostgreSQL.Simple.ToField as Pg
 import qualified Database.PostgreSQL.Simple.TypeInfo.Static as Pg
-import qualified Database.PostgreSQL.Simple.Types as Pg (Binary (..), Null (..), Oid (..))
+import qualified Database.PostgreSQL.Simple.Types as Pg (Binary (..), Null (..),
+                                                         Oid (..))
 
 data PostgresInaccessible
 
@@ -210,10 +216,10 @@ escapeBytea bin = PgSyntax (liftF (EscapeBytea bin ()))
 escapeIdentifier id = PgSyntax (liftF (EscapeIdentifier id ()))
 
 nextSyntaxStep :: PgSyntaxF f -> f
-nextSyntaxStep (EmitByteString _ next)   = next
-nextSyntaxStep (EmitBuilder _ next)      = next
-nextSyntaxStep (EscapeString _ next)     = next
-nextSyntaxStep (EscapeBytea _ next)      = next
+nextSyntaxStep (EmitByteString _ next) = next
+nextSyntaxStep (EmitBuilder _ next) = next
+nextSyntaxStep (EscapeString _ next) = next
+nextSyntaxStep (EscapeBytea _ next) = next
 nextSyntaxStep (EscapeIdentifier _ next) = next
 
 -- * Syntax types
@@ -272,9 +278,9 @@ data PgSelectLockingClauseSyntax = PgSelectLockingClauseSyntax { pgSelectLocking
                                                                , pgSelectLockingClauseOptions :: Maybe PgSelectLockingOptions }
 
 fromPgOrdering :: PgOrderingSyntax -> PgSyntax
-fromPgOrdering (PgOrderingSyntax s Nothing)                         = s
+fromPgOrdering (PgOrderingSyntax s Nothing) = s
 fromPgOrdering (PgOrderingSyntax s (Just PgNullOrderingNullsFirst)) = s <> emit " NULLS FIRST"
-fromPgOrdering (PgOrderingSyntax s (Just PgNullOrderingNullsLast))  = s <> emit " NULLS LAST"
+fromPgOrdering (PgOrderingSyntax s (Just PgNullOrderingNullsLast)) = s <> emit " NULLS LAST"
 
 data PgNullOrdering
   = PgNullOrderingNullsFirst
@@ -285,18 +291,18 @@ fromPgSelectLockingClause :: PgSelectLockingClauseSyntax -> PgSyntax
 fromPgSelectLockingClause s =
   emit " FOR " <>
   (case pgSelectLockingClauseStrength s of
-    PgSelectLockingStrengthUpdate      -> emit "UPDATE"
+    PgSelectLockingStrengthUpdate -> emit "UPDATE"
     PgSelectLockingStrengthNoKeyUpdate -> emit "NO KEY UPDATE"
-    PgSelectLockingStrengthShare       -> emit "SHARE"
-    PgSelectLockingStrengthKeyShare    -> emit "KEY SHARE") <>
+    PgSelectLockingStrengthShare -> emit "SHARE"
+    PgSelectLockingStrengthKeyShare -> emit "KEY SHARE") <>
   emitTables <>
   (maybe mempty emitOptions $ pgSelectLockingClauseOptions s)
   where
     emitTables = case pgSelectLockingTables s of
-      []         -> mempty
+      [] -> mempty
       tableNames -> emit " OF " <> (pgSepBy (emit ", ") (map pgQuotedIdentifier tableNames))
 
-    emitOptions PgSelectLockingOptionsNoWait     = emit " NOWAIT"
+    emitOptions PgSelectLockingOptionsNoWait = emit " NOWAIT"
     emitOptions PgSelectLockingOptionsSkipLocked = emit " SKIP LOCKED"
 
 -- | Specifies the level of lock that will be taken against a row. See
@@ -343,8 +349,8 @@ instance Sql92DisplaySyntax PgColumnSchemaSyntax where
 
 data PgDataTypeSyntax
   = PgDataTypeSyntax
-  { pgDataTypeDescr      :: PgDataTypeDescr
-  , fromPgDataType       :: PgSyntax
+  { pgDataTypeDescr :: PgDataTypeDescr
+  , fromPgDataType :: PgSyntax
   , pgDataTypeSerialized :: BeamSerializedDataType
   } deriving Show
 instance Sql92DisplaySyntax PgDataTypeSyntax where
@@ -352,7 +358,7 @@ instance Sql92DisplaySyntax PgDataTypeSyntax where
 
 data PgColumnConstraintDefinitionSyntax
   = PgColumnConstraintDefinitionSyntax
-  { fromPgColumnConstraintDefinition       :: PgSyntax
+  { fromPgColumnConstraintDefinition :: PgSyntax
   , pgColumnConstraintDefinitionSerialized :: BeamSerializedConstraintDefinition
   } deriving Show
 instance Sql92DisplaySyntax PgColumnConstraintDefinitionSyntax where
@@ -360,18 +366,18 @@ instance Sql92DisplaySyntax PgColumnConstraintDefinitionSyntax where
 
 data PgColumnConstraintSyntax
   = PgColumnConstraintSyntax
-  { fromPgColumnConstraint       :: PgSyntax
+  { fromPgColumnConstraint :: PgSyntax
   , pgColumnConstraintSerialized :: BeamSerializedConstraint
   }
 newtype PgTableConstraintSyntax = PgTableConstraintSyntax { fromPgTableConstraint :: PgSyntax }
 data PgMatchTypeSyntax
   = PgMatchTypeSyntax
-  { fromPgMatchType       :: PgSyntax
+  { fromPgMatchType :: PgSyntax
   , pgMatchTypeSerialized :: BeamSerializedMatchType
   }
 data PgReferentialActionSyntax
   = PgReferentialActionSyntax
-  { fromPgReferentialAction       :: PgSyntax
+  { fromPgReferentialAction :: PgSyntax
   , pgReferentialActionSerialized :: BeamSerializedReferentialAction
   }
 newtype PgDropTableSyntax = PgDropTableSyntax { fromPgDropTable :: PgSyntax }
@@ -566,11 +572,11 @@ instance Sql92SerializableDataTypeSyntax PgDataTypeSyntax where
   serializeDataType = fromBeamSerializedDataType . pgDataTypeSerialized
 
 pgOptPrec :: Maybe Word -> PgSyntax
-pgOptPrec Nothing  = mempty
+pgOptPrec Nothing = mempty
 pgOptPrec (Just x) = emit "(" <> emit (fromString (show x)) <> emit ")"
 
 pgOptCharSet :: Maybe T.Text -> PgSyntax
-pgOptCharSet Nothing   = mempty
+pgOptCharSet Nothing = mempty
 pgOptCharSet (Just cs) = emit " CHARACTER SET " <> emit (TE.encodeUtf8 cs)
 
 pgOptNumericPrec :: Maybe (Word, Maybe Word) -> PgSyntax
@@ -1032,7 +1038,7 @@ instance IsSql92ColumnSchemaSyntax PgColumnSchemaSyntax where
         maybe mempty (\d -> emit " DEFAULT " <> fromPgExpression d) defaultClause <>
         (case constraints of
            [] -> mempty
-           _  -> foldMap (\c -> emit " " <> fromPgColumnConstraintDefinition c) constraints) <>
+           _ -> foldMap (\c -> emit " " <> fromPgColumnConstraintDefinition c) constraints) <>
         maybe mempty (\nm -> emit " COLLATE " <> pgQuotedIdentifier nm) collation
 
 instance IsSql92MatchTypeSyntax PgMatchTypeSyntax where
@@ -1054,10 +1060,10 @@ instance IsSql92ReferentialActionSyntax PgReferentialActionSyntax where
 fromSqlConstraintAttributes :: SqlConstraintAttributesBuilder -> PgSyntax
 fromSqlConstraintAttributes (SqlConstraintAttributesBuilder timing deferrable) =
   maybe mempty timingBuilder timing <> maybe mempty deferrableBuilder deferrable
-  where timingBuilder InitiallyDeferred  = emit "INITIALLY DEFERRED"
+  where timingBuilder InitiallyDeferred = emit "INITIALLY DEFERRED"
         timingBuilder InitiallyImmediate = emit "INITIALLY IMMEDIATE"
         deferrableBuilder False = emit "NOT DEFERRABLE"
-        deferrableBuilder True  = emit "DEFERRABLE"
+        deferrableBuilder True = emit "DEFERRABLE"
 
 instance Hashable PgColumnConstraintDefinitionSyntax where
   hashWithSalt salt = hashWithSalt salt . fromPgColumnConstraintDefinition
@@ -1155,7 +1161,7 @@ instance HasSqlValueSyntax PgValueSyntax SqlNull where
   sqlValueSyntax _ = defaultPgValueSyntax Pg.Null
 
 instance HasSqlValueSyntax PgValueSyntax x => HasSqlValueSyntax PgValueSyntax (Maybe x) where
-  sqlValueSyntax Nothing  = sqlValueSyntax SqlNull
+  sqlValueSyntax Nothing = sqlValueSyntax SqlNull
   sqlValueSyntax (Just x) = sqlValueSyntax x
 
 instance HasSqlValueSyntax PgValueSyntax B.ByteString where
@@ -1214,8 +1220,8 @@ pgJoin joinType a b (Just on) =
   emit " ON " <> fromPgExpression on
 
 pgSepBy :: PgSyntax -> [PgSyntax] -> PgSyntax
-pgSepBy _ []       = mempty
-pgSepBy _ [x]      = x
+pgSepBy _ [] = mempty
+pgSepBy _ [x] = x
 pgSepBy sep (x:xs) = x <> sep <> pgSepBy sep xs
 
 pgDebugRenderSyntax :: PgSyntax -> IO ()
@@ -1240,24 +1246,24 @@ pgDebugRenderSyntax (PgSyntax p) = go p Nothing
               renderStep e >>
               nextSyntaxStep s (Just (fmap (const ()) s))
 
-        renderStep (EmitByteString x _)   = putStrLn ("EmitByteString " <> show x)
-        renderStep (EmitBuilder x _)      = putStrLn ("EmitBuilder " <> show (toLazyByteString x))
-        renderStep (EscapeString x _)     = putStrLn ("EscapeString " <> show x)
-        renderStep (EscapeBytea x _)      = putStrLn ("EscapeBytea " <> show x)
+        renderStep (EmitByteString x _) = putStrLn ("EmitByteString " <> show x)
+        renderStep (EmitBuilder x _) = putStrLn ("EmitBuilder " <> show (toLazyByteString x))
+        renderStep (EscapeString x _) = putStrLn ("EscapeString " <> show x)
+        renderStep (EscapeBytea x _) = putStrLn ("EscapeBytea " <> show x)
         renderStep (EscapeIdentifier x _) = putStrLn ("EscapeIdentifier " <> show x)
 
-        finish x Nothing  = pure x
+        finish x Nothing = pure x
         finish x (Just s) = renderStep s >> pure x
 
 pgBuildAction :: [ Pg.Action ] -> PgSyntax
 pgBuildAction =
   foldMap $ \action ->
   case action of
-    Pg.Plain x             -> emitBuilder x
-    Pg.Escape str          -> emit "'" <> escapeString str <> emit "'"
-    Pg.EscapeByteA bin     -> emit "'" <> escapeBytea bin <> emit "'"
+    Pg.Plain x -> emitBuilder x
+    Pg.Escape str -> emit "'" <> escapeString str <> emit "'"
+    Pg.EscapeByteA bin -> emit "'" <> escapeBytea bin <> emit "'"
     Pg.EscapeIdentifier id -> escapeIdentifier id
-    Pg.Many as             -> pgBuildAction as
+    Pg.Many as -> pgBuildAction as
 
 -- * Postgres-specific extensions
 
@@ -1325,10 +1331,10 @@ pgRenderSyntaxScript (PgSyntax mkQuery) =
   toLazyByteString (runF mkQuery finish step)
   where
     finish _ = mempty
-    step (EmitBuilder b next)      = b <> next
-    step (EmitByteString b next)   = byteString b <> next
-    step (EscapeString b next)     = escapePgString b <> next
-    step (EscapeBytea b next)      = escapePgBytea b <> next
+    step (EmitBuilder b next) = b <> next
+    step (EmitByteString b next) = byteString b <> next
+    step (EscapeString b next) = escapePgString b <> next
+    step (EscapeBytea b next) = escapePgBytea b <> next
     step (EscapeIdentifier b next) = escapePgIdentifier b <> next
 
     escapePgString b = byteString (B.concatMap (\w -> if w == '\'' then "''" else B.singleton w) b)
@@ -1336,7 +1342,7 @@ pgRenderSyntaxScript (PgSyntax mkQuery) =
     escapePgIdentifier bs = char8 '"' <> foldMap quoteIdentifierChar (B.unpack bs) <> char8 '"'
       where
         quoteIdentifierChar '"' = char8 '"' <> char8 '"'
-        quoteIdentifierChar c   = char8 c
+        quoteIdentifierChar c = char8 c
 
 
 -- * Instances for 'HasDefaultSqlDataType'
@@ -1351,7 +1357,7 @@ instance HasDefaultSqlDataTypeConstraints PgColumnSchemaSyntax LocalTime
 
 instance HasDefaultSqlDataType PgDataTypeSyntax (SqlSerial Int) where
   defaultSqlDataType _ False = pgSerialType
-  defaultSqlDataType _ _     = intType
+  defaultSqlDataType _ _ = intType
 instance HasDefaultSqlDataTypeConstraints PgColumnSchemaSyntax (SqlSerial Int)
 
 instance HasDefaultSqlDataType PgDataTypeSyntax UUID where

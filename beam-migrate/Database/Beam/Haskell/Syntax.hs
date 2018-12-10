@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE CPP                        #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- | Instances that allow us to use Haskell as a backend syntax. This allows us
@@ -12,27 +12,27 @@
 -- for us in @haskell-src-exts@.
 module Database.Beam.Haskell.Syntax where
 
-import Database.Beam
-import Database.Beam.Backend.SQL
-import Database.Beam.Backend.SQL.Builder
-import Database.Beam.Migrate.Serialization
-import Database.Beam.Migrate.SQL.SQL92
+import           Database.Beam
+import           Database.Beam.Backend.SQL
+import           Database.Beam.Backend.SQL.Builder
+import           Database.Beam.Migrate.Serialization
+import           Database.Beam.Migrate.SQL.SQL92
 
-import Data.Char (toLower, toUpper)
-import Data.Hashable
-import Data.List (find, nub)
+import           Data.Char (toLower, toUpper)
+import           Data.Hashable
+import           Data.List (find, nub)
 import qualified Data.Map as M
-import Data.Maybe
+import           Data.Maybe
 import qualified Data.Set as S
-import Data.String
+import           Data.String
 import qualified Data.Text as T
 #if !MIN_VERSION_base(4, 11, 0)
-import Data.Semigroup
+import           Data.Semigroup
 #endif
 
 import qualified Language.Haskell.Exts as Hs
 
-import Text.PrettyPrint (render)
+import           Text.PrettyPrint (render)
 
 newtype HsDbField = HsDbField { buildHsDbField :: Hs.Type () -> Hs.Type () }
 
@@ -81,8 +81,8 @@ instance Monoid HsImports where
 
 data HsDataType
   = HsDataType
-  { hsDataTypeMigration  :: HsExpr
-  , hsDataTypeType       :: HsType
+  { hsDataTypeMigration :: HsExpr
+  , hsDataTypeType :: HsType
   , hsDataTypeSerialized :: BeamSerializedDataType
   } deriving (Eq, Show, Generic)
 instance Hashable HsDataType where
@@ -99,16 +99,16 @@ instance Hashable HsType
 
 data HsExpr
   = HsExpr
-  { hsExprSyntax        :: Hs.Exp ()
-  , hsExprImports       :: HsImports
-  , hsExprConstraints   :: [ Hs.Asst () ]
+  { hsExprSyntax  :: Hs.Exp ()
+  , hsExprImports :: HsImports
+  , hsExprConstraints :: [ Hs.Asst () ]
   , hsExprTypeVariables :: S.Set (Hs.Name ())
   } deriving (Show, Eq, Generic)
 instance Hashable HsExpr
 
 data HsColumnSchema
   = HsColumnSchema
-  { mkHsColumnSchema   :: T.Text -> HsExpr
+  { mkHsColumnSchema :: T.Text -> HsExpr
   , hsColumnSchemaType :: HsType
   }
 instance Show HsColumnSchema where
@@ -193,7 +193,7 @@ instance Monoid HsTableConstraintDecls where
 
 data HsModule
   = HsModule
-  { hsModuleName      :: String
+  { hsModuleName :: String
   , hsModuleEntities  :: [ HsEntity ]
   , hsModuleMigration :: [ (Maybe (Hs.Pat ()), HsExpr) ]
   }
@@ -297,7 +297,7 @@ migrationDecl _ _ migrations entities =
     body = Hs.Do () (map (\(pat, expr) ->
                             let expr' = hsExprSyntax expr
                             in case pat of
-                              Nothing   -> Hs.Qualifier () expr'
+                              Nothing -> Hs.Qualifier () expr'
                               Just pat' -> Hs.Generator () pat' expr') migrations ++
                      [Hs.Qualifier () (hsExprSyntax finalReturn)])
 
@@ -344,8 +344,8 @@ dbDecl _ syntax params =
   Hs.FunBind () [ Hs.Match () (Hs.Ident () "db") [] (Hs.UnGuardedRhs () body) Nothing ]
   where
     syntaxVar = case syntax of
-                  HsBeamBackendNone          -> error "No syntax matches"
-                  HsBeamBackendSingle ty _   -> hsTypeSyntax ty
+                  HsBeamBackendNone -> error "No syntax matches"
+                  HsBeamBackendSingle ty _ -> hsTypeSyntax ty
                   HsBeamBackendConstrained _ -> tyVarNamed "syntax"
 
     body = hsExprSyntax $
@@ -484,7 +484,7 @@ instance IsSql92CreateTableSyntax HsAction where
 
       mkHsFieldName fieldNm = "_" ++ varName ++
                               case T.unpack fieldNm of
-                                []     -> error "empty field name"
+                                [] -> error "empty field name"
                                 (x:xs) -> toUpper x:xs
 
       HsTableConstraintDecls tableInstanceDecls constraintDecls = foldMap (\(HsTableConstraint mkConstraint) -> mkConstraint (fromString tyConName) fieldLookup) cs
@@ -599,7 +599,7 @@ instance IsSql92ColumnConstraintDefinitionSyntax HsConstraintDefinition where
   type Sql92ColumnConstraintDefinitionConstraintSyntax HsConstraintDefinition = HsExpr
 
   constraintDefinitionSyntax Nothing expr Nothing = HsConstraintDefinition expr
-  constraintDefinitionSyntax _ _ _                = error "constraintDefinitionSyntax{HsExpr}"
+  constraintDefinitionSyntax _ _ _ = error "constraintDefinitionSyntax{HsExpr}"
 
 instance Sql92SerializableConstraintDefinitionSyntax HsConstraintDefinition where
   serializeConstraint _ = "unknown-constrainst"
@@ -705,7 +705,7 @@ instance IsSql92ConstraintAttributesSyntax HsNone where
 instance HasSqlValueSyntax HsExpr Int where
   sqlValueSyntax = hsInt
 instance HasSqlValueSyntax HsExpr Bool where
-  sqlValueSyntax True  = hsVar "True"
+  sqlValueSyntax True = hsVar "True"
   sqlValueSyntax False = hsVar "False"
 
 instance IsSql92FieldNameSyntax HsExpr where
@@ -927,11 +927,11 @@ hsList, hsTuple :: [ HsExpr ] -> HsExpr
 hsList = foldl (combineHsExpr addList) (HsExpr (Hs.List () []) mempty mempty mempty)
   where
     addList (Hs.List () ts) t = Hs.List () (ts ++ [t])
-    addList _ _               = error "addList"
+    addList _ _ = error "addList"
 hsTuple = foldl (combineHsExpr addTuple) (HsExpr (Hs.Tuple () Hs.Boxed []) mempty mempty mempty)
   where
     addTuple (Hs.Tuple () boxed ts) t = Hs.Tuple () boxed (ts ++ [t])
-    addTuple _ _                      = error "addTuple"
+    addTuple _ _ = error "addTuple"
 
 inst :: String -> Hs.InstRule ()
 inst = Hs.IRule () Nothing Nothing . Hs.IHCon () . Hs.UnQual () . Hs.Ident ()

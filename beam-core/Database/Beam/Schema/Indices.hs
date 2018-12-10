@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Database.Beam.Schema.Indices
@@ -24,25 +24,23 @@ module Database.Beam.Schema.Indices
     , addDefaultDbIndices
     ) where
 
-import Control.Monad.Writer.Strict (runWriter, tell)
+import           Control.Monad.Writer.Strict (runWriter, tell)
 
-import Data.Aeson
-import Data.DList (DList)
+import           Data.Aeson
+import           Data.DList (DList)
 import qualified Data.DList as DL
-import Data.Functor.Identity
-import Data.Hashable (Hashable (..))
-import Data.List.NonEmpty (NonEmpty (..))
-import Data.Proxy
-import Data.Text (Text)
+import           Data.Functor.Identity
+import           Data.Hashable (Hashable (..))
+import           Data.List.NonEmpty (NonEmpty (..))
+import           Data.Proxy
+import           Data.Text (Text)
 import qualified Data.Text as T
 
-import GHC.Exts (Constraint, fromList)
-import GHC.Generics hiding (C, R)
-import GHC.TypeLits
+import           GHC.Exts (Constraint, fromList)
+import           GHC.Generics hiding (C, R)
+import           GHC.TypeLits
 
-import Database.Beam.Schema.Tables
-
--- TODO: format imports as they were everywhere!
+import           Database.Beam.Schema.Tables
 
 -- Some day it should have more options and allow to modify them depending on the backend.
 -- | Index modifiers.

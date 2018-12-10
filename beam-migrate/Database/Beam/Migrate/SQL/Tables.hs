@@ -1,8 +1,8 @@
-{-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE FunctionalDependencies     #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TypeApplications           #-}
-{-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Database.Beam.Migrate.SQL.Tables
   ( -- * Table manipulation
@@ -40,30 +40,30 @@ module Database.Beam.Migrate.SQL.Tables
   , FieldReturnType(..)
   ) where
 
-import Database.Beam
-import Database.Beam.Backend.SQL
-import Database.Beam.Schema.Indices
-import Database.Beam.Schema.Tables
+import           Database.Beam
+import           Database.Beam.Backend.SQL
+import           Database.Beam.Schema.Indices
+import           Database.Beam.Schema.Tables
 
-import Database.Beam.Migrate.Checks
-import Database.Beam.Migrate.SQL.SQL92
-import Database.Beam.Migrate.SQL.Types
-import Database.Beam.Migrate.Types
+import           Database.Beam.Migrate.Checks
+import           Database.Beam.Migrate.SQL.SQL92
+import           Database.Beam.Migrate.SQL.Types
+import           Database.Beam.Migrate.Types
 
-import Control.Applicative
-import Control.Monad.Identity
-import Control.Monad.State
-import Control.Monad.Writer.Strict
+import           Control.Applicative
+import           Control.Monad.Identity
+import           Control.Monad.State
+import           Control.Monad.Writer.Strict
 
-import Data.ByteString (ByteString)
+import           Data.ByteString (ByteString)
 import qualified Data.Kind as Kind (Constraint)
-import Data.Scientific (Scientific)
-import Data.Text (Text)
-import Data.Time (LocalTime, TimeOfDay)
-import Data.Typeable
-import Data.Vector (Vector)
+import           Data.Scientific (Scientific)
+import           Data.Text (Text)
+import           Data.Time (LocalTime, TimeOfDay)
+import           Data.Typeable
+import           Data.Vector (Vector)
 
-import GHC.TypeLits
+import           GHC.TypeLits
 
 -- * Table manipulation
 
@@ -119,7 +119,7 @@ preserve (CheckedDatabaseEntity desc checks) = pure (CheckedDatabaseEntity desc 
 -- | A column in the process of being altered
 data ColumnMigration a
   = ColumnMigration
-  { columnMigrationFieldName   :: Text
+  { columnMigrationFieldName :: Text
   , columnMigrationFieldChecks :: [FieldCheck] }
 
 -- | Monad representing a series of @ALTER TABLE@ statements

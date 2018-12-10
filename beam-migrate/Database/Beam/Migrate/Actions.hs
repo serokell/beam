@@ -1,10 +1,10 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE BangPatterns    #-}
-{-# LANGUAGE CPP             #-}
-{-# LANGUAGE DeriveGeneric   #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TupleSections   #-}
-{-# LANGUAGE TypeOperators   #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeOperators #-}
 
 -- | Data types and functions to discover sequences of DDL commands to go from
 -- one database state to another. Used for migration generation.
@@ -92,30 +92,30 @@ module Database.Beam.Migrate.Actions
   , heuristicSolver
   ) where
 
-import Database.Beam.Migrate.Checks
-import Database.Beam.Migrate.SQL
-import Database.Beam.Migrate.Types
-import Database.Beam.Schema.Indices
+import           Database.Beam.Migrate.Checks
+import           Database.Beam.Migrate.SQL
+import           Database.Beam.Migrate.Types
+import           Database.Beam.Schema.Indices
 
-import Control.Applicative
-import Control.DeepSeq
-import Control.Monad
-import Control.Parallel.Strategies
+import           Control.Applicative
+import           Control.DeepSeq
+import           Control.Monad
+import           Control.Parallel.Strategies
 
-import Data.Foldable
+import           Data.Foldable
 
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import qualified Data.PQueue.Min as PQ
 import qualified Data.Sequence as Seq
-import Data.Text (Text)
+import           Data.Text (Text)
 import qualified Data.Text as T
-import Data.Typeable
+import           Data.Typeable
 #if !MIN_VERSION_base(4, 11, 0)
-import Data.Semigroup
+import           Data.Semigroup
 #endif
 
-import GHC.Generics
+import           GHC.Generics
 
 -- | Used to indicate whether a particular predicate is from the initial
 -- database state, or due to a sequence of actions we've committed too. Used to
@@ -129,12 +129,12 @@ instance NFData DatabaseStateSource
 -- | Represents the state of a database as a migration is being generated
 data DatabaseState cmd
   = DatabaseState
-  { dbStateCurrentState :: !(HM.HashMap SomeDatabasePredicate DatabaseStateSource)
+  { dbStateCurrentState       :: !(HM.HashMap SomeDatabasePredicate DatabaseStateSource)
     -- ^ The current set of predicates that apply to this database as well as
     -- their source (user or from previous actions)
-  , dbStateKey          :: !(HS.HashSet SomeDatabasePredicate)
+  , dbStateKey                :: !(HS.HashSet SomeDatabasePredicate)
     -- ^ HS.fromMap of 'dbStateCurrentState', for maximal sharing
-  , dbStateCmdSequence  :: !(Seq.Seq (MigrationCommand cmd))
+  , dbStateCmdSequence        :: !(Seq.Seq (MigrationCommand cmd))
     -- ^ The current sequence of commands we've committed to in this state
   } deriving Show
 
@@ -181,13 +181,13 @@ data PotentialAction cmd
     -- ^ Preconditions that will no longer apply
   , actionPostConditions :: !(HS.HashSet SomeDatabasePredicate)
     -- ^ Conditions that will apply after we're done
-  , actionCommands       :: !(Seq.Seq (MigrationCommand cmd))
+  , actionCommands     :: !(Seq.Seq (MigrationCommand cmd))
     -- ^ The sequence of commands that accomplish this movement in the database
     -- graph. For an edge, 'actionCommands' contains one command; for a path, it
     -- will contain more.
-  , actionEnglish        :: !Text
+  , actionEnglish      :: !Text
     -- ^ An english description of the movement
-  , actionScore          :: {-# UNPACK #-} !Int
+  , actionScore        :: {-# UNPACK #-} !Int
     -- ^ A heuristic notion of complexity or weight; used to find the "easiest"
     -- path through the graph.
   }
@@ -285,7 +285,7 @@ ensuringNot_ _  = empty
 -- implementation of 'createTableActionProvider' for an example of usage.
 justOne_ :: [ a ] -> [ a ]
 justOne_ [x] = [x]
-justOne_ _   = []
+justOne_ _ = []
 
 -- | Action provider for SQL92 @CREATE TABLE@ actions.
 createTableActionProvider :: forall cmd
@@ -533,8 +533,7 @@ defaultActionProvider =
   , dropColumnProvider
 
   , addColumnNullProvider
-  , dropColumnNullProvider
-   ]
+  , dropColumnNullProvider ]
 
 -- | Action providers for indices management syntax.
 --

@@ -1,8 +1,8 @@
-{-# LANGUAGE CPP                        #-}
-{-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Database.Beam.Migrate.Types
   ( -- * Checked database entities
@@ -99,14 +99,14 @@ instance Semigroup MigrationDataLoss where
 
 instance Monoid MigrationDataLoss where
     mempty = MigrationKeepsData
-    mappend MigrationLosesData _                  = MigrationLosesData
-    mappend _ MigrationLosesData                  = MigrationLosesData
+    mappend MigrationLosesData _ = MigrationLosesData
+    mappend _ MigrationLosesData = MigrationLosesData
     mappend MigrationKeepsData MigrationKeepsData = MigrationKeepsData
 
 -- | A migration command along with metadata on wheth
 data MigrationCommand cmd
   = MigrationCommand
-  { migrationCommand                 :: cmd
+  { migrationCommand :: cmd
     -- ^ The command to run
   , migrationCommandDataLossPossible :: MigrationDataLoss
     -- ^ Information on whether the migration loses data
@@ -185,7 +185,7 @@ migrationDataLoss go = runF go (\_ -> MigrationKeepsData)
                          (\(MigrationRunCommand _ x next) ->
                             case x of
                               Nothing -> MigrationLosesData
-                              _       -> next)
+                              _ -> next)
 
 -- | Run a 'MigrationSteps' without executing any of the commands against a
 -- database.
