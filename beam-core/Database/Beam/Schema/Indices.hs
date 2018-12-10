@@ -212,9 +212,9 @@ contramapTableIndicesBuilder f = fmap (. f)
 data (tbl :: (* -> *) -> *) :-> (tbl' :: (* -> *) -> *)
 
 -- | Provide options for an automatically created index, which is caused by a primary key
--- on table 'tbl\'' being embedded into table 'tbl'.
-class IndexFromReference tbl tbl' where
-    referenceIndexOptions :: Proxy (tbl :-> tbl') -> IndexOptions
+-- of table 'tbl\'' being embedded into table 'tbl'.
+class IndexFromReference reference where
+    referenceIndexOptions :: Proxy reference -> IndexOptions
     referenceIndexOptions _ = indexOptions
 
 {- @martoon: I see several minor (or not) problems with making user define instances of
@@ -264,7 +264,7 @@ instance GAutoTableIndices (Rec0 x) where
     autoTableIndices' = mempty
 
 instance {-# OVERLAPPING #-}
-         (Beamable (PrimaryKey tbl'), IndexFromReference tbl tbl') =>
+         (Beamable (PrimaryKey tbl'), IndexFromReference (tbl :-> tbl')) =>
          GAutoTableIndices (Rec0 (PrimaryKey tbl' (TableField tbl))) where
     autoTableIndices' =
         if tableValuesNeeded (Proxy @(PrimaryKey tbl')) == 0
@@ -278,7 +278,7 @@ instance {-# OVERLAPPING #-}
             in TableIndex (fromList pkFields) opts
 
 instance {-# OVERLAPPING #-}
-         (Beamable (PrimaryKey tbl'), IndexFromReference tbl tbl') =>
+         (Beamable (PrimaryKey tbl'), IndexFromReference (tbl :-> tbl')) =>
          GAutoTableIndices (Rec0 (PrimaryKey tbl' (Nullable (TableField tbl)))) where
     autoTableIndices' =
         if tableValuesNeeded (Proxy @(PrimaryKey tbl')) == 0

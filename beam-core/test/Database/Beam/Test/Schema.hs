@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveAnyClass       #-}
+{-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Database.Beam.Test.Schema
@@ -404,9 +405,9 @@ instance Beamable DummyViewT
 
 instance Database be ColonistDb
 
-instance IndexFromReference ColonistT ColonistT
-instance IndexFromReference ColonistT PlanetT
-instance IndexFromReference PlanetT ColonistT where
+instance IndexFromReference (ColonistT :-> ColonistT)
+instance IndexFromReference (ColonistT :-> PlanetT)
+instance IndexFromReference (PlanetT :-> ColonistT) where
     referenceIndexOptions _ = indexOptions{ indexUnique = True }
 
 instance ReferencesTable ColonistT ColonistT where
